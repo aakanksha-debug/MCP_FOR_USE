@@ -57,7 +57,7 @@ export function formatAuditResult(result: AuditResult, recommendation: ExpertRec
   const facts = Object.keys(result.facts).length ? `\n\n<details><summary>Data collected</summary>\n\n\`\`\`json\n${JSON.stringify(result.facts, null, 1).slice(0, 4000)}\n\`\`\`\n</details>` : "";
   return [
     header,
-    "",
+    "\n\n",
     formatIssues(result.issues),
     list("Already good", result.passed),
     list("Ask the user", result.askUser),
