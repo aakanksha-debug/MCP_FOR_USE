@@ -1,0 +1,151 @@
+import type { FullAuditResult } from "@/audits";
+import type { AuditResult, Issue, Tier } from "@/core/types";
+import type { ExpertRecommendation } from "@/decision/recommend";
+import type { VerifiedIssue } from "@/decision/verify";
+import type { FixResult } from "@/fixes/plan";
+import { countByTier } from "@/policy/classify";
+import { TIERS, TIER_ORDER } from "@/policy/tiers";
+
+/**
+ * Markdown renderers for tool results. Every issue line carries its code and
+ * URL so Claude can pass them back to verify_issues_with_data and prepare_fixes.
+ */
+
+const NEXT_STEP: Record<Tier, string> = {
+  safe: "can be fixed now with `prepare_fixes`",
+  medium: "recommend first; prepare a draft only after the user approves",
+  high: "do not change automatically; recommend expert review",
+};
+
+function issueLine(issue: Issue, index: number, withWhy: boolean): string {
+  const lines = [`${index}. **${issue.title}** \`${issue.code}\` ${issue.url}`];
+  if (issue.detail) lines.push(`   ${issue.detail}`);
+  if (withWhy || issue.tier === "high") lines.push(`   Why: ${issue.why}`);
+  lines.push(`   Fix: ${issue.recommendation}`);
+  return lines.join("\n");
+}
+
+export function formatIssues(issues: Issue[], options: { withWhy?: boolean; limitPerTier?: number } = {}): string {
+  if (!issues.length) return "No issues found.";
+  const sections: string[] = [];
+  for (const tier of TIER_ORDER) {
+    const inTier = issues.filter((issue) => issue.tier === tier);
+    if (!inTier.length) continue;
+    const definition = TIERS[tier];
+    const limit = options.limitPerTier ?? inTier.length;
+    const shown = inTier.slice(0, limit).map((issue, index) => issueLine(issue, index + 1, options.withWhy ?? true));
+    const more = inTier.length > limit ? `\n…and ${inTier.length - limit} more ${definition.label.toLowerCase()} issues.` : "";
+    sections.push(`### ${definition.emoji} ${definition.label} (${inTier.length}): ${NEXT_STEP[tier]}\n${shown.join("\n")}${more}`);
+  }
+  return sections.join("\n\n");
+}
+
+function list(title: string, items: string[]): string {
+  return items.length ? `\n\n**${title}**\n${items.map((item) => `- ${item}`).join("\n")}` : "";
+}
+
+function recommendationBlock(recommendation: ExpertRecommendation | null): string {
+  return recommendation ? `\n\n**Expert help (optional):** ${recommendation.text}` : "";
+}
+
+export function formatAuditResult(result: AuditResult, recommendation: ExpertRecommendation | null): string {
+  const counts = countByTier(result.issues);
+  const header = [
+    `## ${result.name}: ${result.target}`,
+    `Score: **${result.score}/100** · 🔴 ${counts.high} · 🟡 ${counts.medium} · 🟢 ${counts.safe}`,
+  ].join("\n");
+  const facts = Object.keys(result.facts).length ? `\n\n<details><summary>Data collected</summary>\n\n\`\`\`json\n${JSON.stringify(result.facts, null, 1).slice(0, 4000)}\n\`\`\`\n</details>` : "";
+  return [
+    header,
+    "",
+    formatIssues(result.issues),
+    list("Already good", result.passed),
+    list("Ask the user", result.askUser),
+    list("Notes", result.notes),
+    facts,
+    recommendationBlock(recommendation),
+  ].join("");
+}
+
+export function formatFullAudit(full: FullAuditResult, recommendation: ExpertRecommendation | null): string {
+  const counts = countByTier(full.issues);
+  const scoreboard = full.results.map((result) => `| ${result.name} | ${result.score}/100 | ${result.issues.length} |`).join("\n");
+  const askUser = [...new Set(full.results.flatMap((result) => result.askUser))];
+  const notes = [...new Set(full.results.flatMap((result) => result.notes))];
+  return [
+    `## Full website audit: ${full.target}`,
+    `Overall score: **${full.overallScore}/100** · 🔴 ${counts.high} · 🟡 ${counts.medium} · 🟢 ${counts.safe}`,
+    "",
+    "| Check | Score | Issues |",
+    "|---|---|---|",
+    scoreboard,
+    "",
+    formatIssues(full.issues, { withWhy: false, limitPerTier: 15 }),
+    full.errors.length ? list("Checks that could not run", full.errors.map((error) => `${error.audit}: ${error.message}`)) : "",
+    list("Ask the user", askUser),
+    list("Notes", notes),
+    recommendationBlock(recommendation),
+  ].join("\n");
+}
+
+const STATUS_LABEL: Record<VerifiedIssue["status"], string> = {
+  confirmed: "✅ Confirmed by data",
+  likely: "🔎 Likely affecting results",
+  "insufficient-data": "❔ Not enough data",
+  "not-visible-in-data": "➖ No visible impact",
+};
+
+export function formatVerification(
+  verified: VerifiedIssue[],
+  context: { property?: string; ga4PropertyId?: string; period: string; notes: string[] },
+  recommendation: ExpertRecommendation | null,
+): string {
+  const lines = verified.map(
+    (item, index) =>
+      `${index + 1}. ${TIERS[item.tier].emoji} **${item.title}** \`${item.code}\` ${item.url}\n   ${STATUS_LABEL[item.status]}: ${item.explanation} (priority ${item.priority})`,
+  );
+  const counts = verified.reduce<Record<string, number>>((acc, item) => ({ ...acc, [item.status]: (acc[item.status] ?? 0) + 1 }), {});
+  return [
+    "## Issues checked against real data",
+    `Search Console: ${context.property ?? "not used"} · GA4: ${context.ga4PropertyId ?? "not used"} · Period: ${context.period}`,
+    `Confirmed ${counts.confirmed ?? 0} · Likely ${counts.likely ?? 0} · No visible impact ${counts["not-visible-in-data"] ?? 0} · Not enough data ${counts["insufficient-data"] ?? 0}`,
+    "",
+    "Sorted by priority (impact × traffic × evidence):",
+    lines.join("\n"),
+    list("Notes", context.notes),
+    recommendationBlock(recommendation),
+  ].join("\n");
+}
+
+export function formatFixes(results: FixResult[]): string {
+  const blocks = results.map((result) => {
+    const emoji = result.tier === "unknown" ? "❔" : TIERS[result.tier].emoji;
+    const head = `### ${emoji} ${result.title} \`${result.code}\`\n${result.url}`;
+    const outcome = result.outcome;
+    switch (outcome.status) {
+      case "ready":
+        return `${head}\n**Ready to apply.**\n${outcome.changes
+          .map(
+            (change) =>
+              `- ${change.description}\n  Where: ${change.whereToApply}${change.before ? `\n  Before:\n\`\`\`\n${change.before}\n\`\`\`` : ""}\n  After:\n\`\`\`\n${change.after}\n\`\`\`${change.notes?.length ? `\n  Note: ${change.notes.join(" ")}` : ""}`,
+          )
+          .join("\n")}`;
+      case "needs-approval":
+        return `${head}\n**Needs the user's approval first.** Proposal: ${outcome.proposal}`;
+      case "draft":
+        return `${head}\n**Draft (approved by the user, review before publishing):** ${outcome.draft.summary}${outcome.draft.draft ? `\n\`\`\`\n${outcome.draft.draft}\n\`\`\`` : ""}${outcome.draft.guidance.length ? `\n${outcome.draft.guidance.map((line) => `- ${line}`).join("\n")}` : ""}`;
+      case "expert-review":
+        return `${head}\n**Not changed automatically (high risk).** ${outcome.reason}`;
+      case "not-detected":
+        return `${head}\n${outcome.reason}`;
+      case "error":
+        return `${head}\nCould not prepare a fix: ${outcome.reason}`;
+    }
+  });
+  return [
+    "## Prepared fixes",
+    "Nothing has been changed on the website. Apply the ready fixes in the site's editor or code (Claude can apply them directly if it has access to the site's code), then re-run the audit to confirm.",
+    "",
+    blocks.join("\n\n"),
+  ].join("\n");
+}

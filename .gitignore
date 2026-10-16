@@ -1,0 +1,17 @@
+node_modules/
+.next/
+out/
+coverage/
+*.tsbuildinfo
+next-env.d.ts
+
+# Local env files hold secrets. Only .env.example is committed.
+.env
+.env.*
+!.env.example
+
+# Vercel CLI link data
+.vercel/
+
+.DS_Store
+npm-debug.log*

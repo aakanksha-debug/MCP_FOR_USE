@@ -1,0 +1,65 @@
+# Architecture
+
+The project is a Next.js app on Vercel that exposes one MCP endpoint (`/api/mcp`, Streamable HTTP via [`mcp-handler`](https://www.npmjs.com/package/mcp-handler)) plus two routes for the optional Google sign-in. Everything else lives in `src/`, split into layers that only depend downward.
+
+```
+app/                         HTTP surface (Next.js route handlers and pages)
+  api/mcp/route.ts           MCP endpoint
+  api/google/connect         One-time sign-in link → Google consent screen
+  api/google/callback        OAuth callback → stores encrypted tokens
+  page.tsx, privacy/         Landing and privacy pages
+
+src/mcp/                     MCP layer: tool registration, schemas, formatting, server instructions
+  tools/audit-tools.ts       8 audit tools + run_full_audit
+  tools/google-tools.ts      Google connection, Search Console and GA4 tools
+  tools/decision-tools.ts    verify_issues_with_data, prepare_fixes, list_issue_types, get_expert_help
+  format.ts                  Markdown output (every issue carries its code + URL)
+  instructions.ts            Workflow guidance sent to Claude at initialization
+
+src/audits/                  One module per audit; each returns findings, never tiers
+src/policy/                  Issue catalog (tier, impact, wording, fixability), classification, scoring
+src/decision/                Verification against GSC/GA4 data and the Incrementors recommendation rules
+src/fixes/                   Fix generators (safe), drafts (approved medium), platform guidance, policy enforcement
+src/integrations/            Google (OAuth, GSC, GA4), PageSpeed Insights, storage (Redis/memory, encryption)
+src/core/                    Safe fetching, HTML extraction, robots/sitemap parsing, per-call context, types
+src/config/                  Environment access and Incrementors brand/service links
+```
+
+## How a tool call flows
+
+1. `app/api/mcp/route.ts` hands the request to `mcp-handler`, which validates input against the tool's zod schema.
+2. The tool creates a fresh `AuditContext` (`src/core/context.ts`). It memoizes fetches for this call only and enforces a time budget that keeps the function under Vercel's 60-second limit. Nothing is shared between users or calls.
+3. Audit modules read pages through the context. `safeFetch` blocks private addresses, caps size and time, and records redirects. `extractPage` parses HTML once into plain data (`PageData`).
+4. Audits emit `Finding`s (code, URL, detail). `src/policy/classify.ts` attaches tier, impact, wording and fix policy from the catalog, deduplicates and scores.
+5. `src/decision/recommend.ts` decides whether an expert-help line is appropriate. `src/mcp/format.ts` renders Markdown.
+
+## Separation of concerns
+
+- **Audits observe, policy decides.** Audits never assign risk. Changing what counts as high-risk is a one-line edit in `src/policy/catalog.ts`, and `prepare_fixes` picks it up automatically.
+- **Integrations feed data, decisions interpret it.** `verify.ts` is pure: the tool layer fetches GSC/GA4 data and passes it in, so the rules are unit-tested without Google.
+- **Fixes are generated, never applied.** Generators derive changes from what is already on the page and flag anything uncertain. Application belongs to Claude (when it has site access) or the user.
+
+## Extending
+
+**Add an issue type:** add a definition in `src/policy/catalog.ts`, emit its code from an audit. For a safe issue with an automatic fix, add a `FixKind` in `src/core/types.ts` and a generator in `src/fixes/generators.ts` (the policy test fails if a safe fix has no generator).
+
+**Add an audit:** create `src/audits/<name>.ts` implementing `AuditModule`, register it in `src/audits/index.ts` (and `ALL_AUDITS`), add the `AuditId`, register a tool in `src/mcp/tools/audit-tools.ts`, and add fixture-based tests in `tests/audits.test.ts`.
+
+**Add an integration** (for example Bing Webmaster Tools, Ahrefs, Semrush, Google Business Profile API): put the client under `src/integrations/<provider>/`, map its data to a provider-neutral shape (see `SearchRow` in `src/core/search-data.ts`), and feed it into the decision layer. Register its tools in a new file under `src/mcp/tools/` and add it in `src/mcp/server.ts`.
+
+**Apply fixes directly** (WordPress REST API, Shopify Admin API, a GitHub repo): add an applier that takes the `FixChange` objects from `prepareFixes`. Keep the tier check in `src/fixes/plan.ts` in front of it so high-risk changes can never be applied.
+
+## Google connection model
+
+The MCP is authless so anyone can add it without signing in. Google access is opt-in per conversation:
+
+1. `google_connect` creates a random `connectionId` (returned to Claude) and a one-time `start` token (in the sign-in link). Only a SHA-256 hash of the connection ID is used as the storage key.
+2. `/api/google/connect` consumes the start token and redirects to Google with a random `state` and a PKCE challenge.
+3. `/api/google/callback` consumes the state, exchanges the code with the PKCE verifier and stores AES-256-GCM encrypted tokens for 30 days.
+4. Tools call `getAccessToken(connectionId)`, which refreshes tokens when needed. `google_disconnect` revokes them at Google and deletes them.
+
+The connection ID works like a bearer token inside the user's Claude conversation. A future upgrade path is MCP-native OAuth (the user signs in when adding the connector, using `withMcpAuth` from `mcp-handler`), which ties Google access to an authenticated user instead of an ID in the conversation.
+
+## Testing
+
+`tests/fixtures/site.ts` is a small fictional business site with planted issues, served through a mock fetcher, so every audit, the fix policy, the decision rules and the Google connection lifecycle run offline with `npm test`.
