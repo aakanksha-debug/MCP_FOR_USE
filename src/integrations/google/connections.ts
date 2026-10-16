@@ -55,7 +55,9 @@ function dependencies(): Dependencies {
   const key = tokenEncryptionKey();
   if (!config || !key) {
     throw new GoogleIntegrationError(
-      "Google Search Console / GA4 connection is not configured on this server yet. Website audits still work without it.",
+      `Google Search Console / GA4 connection is not configured on this server yet. Website audits still work without it. ` +
+        `(Server admin: create a Google OAuth web client with the redirect URI ${publicBaseUrl()}/api/google/callback, ` +
+        `then set GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET and TOKEN_ENCRYPTION_KEY. See docs/DEPLOYMENT.md.)`,
       "not_configured",
     );
   }
