@@ -103,7 +103,13 @@ export const gbpAudit: AuditModule<GbpInput> = {
 
     if (!phones.length) add("gbp.site.phone_missing");
     else output.passed.push(`Phone number shown on the website (${phones.length} distinct)`);
-    if (phones.length > 2) add("gbp.site.nap_inconsistent", `${phones.length} different phone numbers`, { phones });
+    if (phones.length > 2) {
+      add(
+        "gbp.site.nap_inconsistent",
+        `${phones.length} different phone numbers: ${phones.join(", ")}. Fine if each belongs to a separate location; otherwise keep one primary number.`,
+        { phones },
+      );
+    }
 
     const hasAddress = pages.some((p) => p.hasAddress);
     if (!hasAddress && !serviceArea) add("gbp.site.address_missing");

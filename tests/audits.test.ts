@@ -189,3 +189,23 @@ describe("Full audit", () => {
     await expect(runAudit(seoHealthAudit, offline, { url: "https://nowhere.test" })).rejects.toThrow(/Could not reach/);
   });
 });
+
+describe("brand detection", () => {
+  it("does not treat a title tagline as a second brand when og:site_name exists", async () => {
+    const { brandCandidates } = await import("@/audits/shared");
+    const { extractPage } = await import("@/core/extract");
+    const page = extractPage({
+      requestedUrl: "https://x.test/",
+      url: "https://x.test/",
+      status: 200,
+      ok: true,
+      headers: { "content-type": "text/html" },
+      redirects: [],
+      body: '<html><head><title>Local SEO Agency | Digital Marketing Services at Scale</title><meta property="og:site_name" content="Incrementors"></head><body></body></html>',
+      bytes: 100,
+      truncated: false,
+      timingMs: 1,
+    });
+    expect(brandCandidates(page)).toEqual(["Incrementors"]);
+  });
+});

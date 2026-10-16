@@ -140,11 +140,6 @@ export async function findBrokenInternalLinks(
 export function brandCandidates(page: PageData): string[] {
   const names = new Set<string>();
   if (page.siteName) names.add(page.siteName);
-  const titleParts = (page.title ?? "").split(/\s[|\-–—:·]\s/);
-  if (titleParts.length > 1) {
-    const last = titleParts[titleParts.length - 1]?.trim();
-    if (last && last.split(/\s+/).length <= 5) names.add(last);
-  }
   for (const block of page.jsonLd) {
     const nodes = Array.isArray(block.data) ? block.data : [block.data];
     for (const node of nodes) {
@@ -158,6 +153,12 @@ export function brandCandidates(page: PageData): string[] {
         }
       }
     }
+  }
+  // The title suffix is only a guess (it is often a tagline), so use it when nothing better exists.
+  if (!names.size) {
+    const titleParts = (page.title ?? "").split(/\s[|\-–—:·]\s/);
+    const last = titleParts.length > 1 ? titleParts[titleParts.length - 1]?.trim() : undefined;
+    if (last && last.split(/\s+/).length <= 5) names.add(last);
   }
   return [...names].map((name) => name.trim()).filter(Boolean);
 }
