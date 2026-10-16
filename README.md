@@ -47,7 +47,7 @@ The server instructions tell Claude to mention it at most once per conversation 
 
 ## User flow
 
-1. The user adds the connector URL (`https://<deployment>/api/mcp`) in Claude: Settings → Connectors → Add custom connector.
+1. The user adds the connector URL (`https://<deployment>/api/mcp`; the bare site URL also works) in Claude: Settings → Connectors → Add custom connector.
 2. They give Claude their website URL; Claude picks the relevant checks.
 3. Optionally, Claude calls `google_connect`, the user signs in with Google (read-only), and Claude uses the returned `connectionId` to verify issues with GSC/GA4 data.
 4. Claude explains the prioritized issues, prepares safe fixes, asks before medium changes and flags high-risk work for experts.
