@@ -1,6 +1,6 @@
 # Deployment (Vercel)
 
-The website audits need no configuration at all. Google Search Console / GA4 verification needs a Google OAuth client, an encryption key and a Redis store. All values live in Vercel environment variables, never in the repository.
+The website audits need no configuration at all. Publishing approved fixes to websites needs an encryption key and a Redis store. Google Search Console / GA4 verification additionally needs a Google OAuth client. All values live in Vercel environment variables, never in the repository.
 
 ## 1. Deploy the app
 
@@ -21,8 +21,8 @@ Set these in **Project → Settings → Environment Variables** (see `.env.examp
 |---|---|---|
 | `PUBLIC_BASE_URL` | Google | Stable public URL, for example `https://incrementors-audit-mcp.vercel.app`. Must match the OAuth redirect URI. |
 | `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` | Google | From step 4. |
-| `TOKEN_ENCRYPTION_KEY` | Google | `node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"` |
-| `KV_REST_API_URL`, `KV_REST_API_TOKEN` | Google | Set automatically by the Upstash integration (step 3). `UPSTASH_REDIS_REST_URL`/`_TOKEN` also work. |
+| `TOKEN_ENCRYPTION_KEY` | Publishing, Google | `node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"` |
+| `KV_REST_API_URL`, `KV_REST_API_TOKEN` | Publishing, Google | Set automatically by the Upstash integration (step 3). `UPSTASH_REDIS_REST_URL`/`_TOKEN` also work. |
 | `PAGESPEED_API_KEY` | Optional | Higher PageSpeed Insights quota for Core Web Vitals. |
 | `INCREMENTORS_CONTACT_URL` | Optional | Overrides the contact link in expert-help replies. |
 | `MCP_VERBOSE_LOGS` | Optional | `true` logs each MCP request. |
@@ -33,7 +33,7 @@ Redeploy after changing variables.
 
 In the Vercel project: **Storage → Marketplace → Upstash (Redis) → Create**, connect it to the project. It injects the `KV_REST_API_*` variables. The free tier is enough for testing.
 
-Without Redis, Google tools refuse to run on Vercel (serverless instances do not share memory). Locally, an in-memory store is used automatically.
+Without Redis, the publishing and Google tools refuse to run on Vercel (serverless instances do not share memory). Website connections, approval pages and Google connections are all stored there. Locally, an in-memory store is used automatically.
 
 ## 4. Google OAuth client
 

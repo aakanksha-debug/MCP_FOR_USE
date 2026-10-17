@@ -16,10 +16,10 @@ export const TIERS: Record<Tier, TierDefinition> = {
   safe: {
     tier: "safe",
     emoji: "🟢",
-    label: "Minor / safe",
+    label: "Minor",
     policy: "auto-fix",
     description:
-      "Predefined low-risk issues. The MCP prepares an exact, ready-to-apply fix (additive or mechanical changes only).",
+      "Content-level fixes (titles, meta descriptions, image alt text, links). Prepared only when the user asks, and published only after the site owner approves them on the approval page.",
   },
   medium: {
     tier: "medium",
@@ -27,15 +27,15 @@ export const TIERS: Record<Tier, TierDefinition> = {
     label: "Medium",
     policy: "needs-approval",
     description:
-      "Recommendations first. A draft change is prepared only after the user explicitly approves it.",
+      "Content and conversion recommendations. A draft is prepared only after the user explicitly approves it.",
   },
   high: {
     tier: "high",
     emoji: "🔴",
-    label: "Major / high-risk",
+    label: "Needs expert advice",
     policy: "expert-review",
     description:
-      "Never changed automatically (indexation, canonicals, redirects, architecture, complex technical work). Recommend expert review.",
+      "High-risk changes (indexing, canonicals, redirects) or anything that needs installing or removing plugins, adding code snippets, changing the theme or server settings. Never changed by the MCP; contact an Incrementors SEO strategist.",
   },
 };
 

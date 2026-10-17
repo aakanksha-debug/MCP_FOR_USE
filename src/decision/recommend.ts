@@ -37,7 +37,7 @@ export function expertRecommendation(issues: Issue[], verified: VerifiedIssue[] 
     return {
       area,
       serviceUrl: service.url,
-      text: `Issues like ${quoteTitles(high)} are risky to change without a careful plan. If you want a second pair of eyes, ${BRAND.name}' ${service.label} team can ${service.help} (${service.url}).`,
+      text: `⚠️ ${high.length === 1 ? "One issue needs" : `${high.length} issues need`} expert advice (for example ${quoteTitles(high)}): they are high-risk or need plugin, theme, code or server changes, so the MCP will not change them. An ${BRAND.strategistLabel} can ${service.help}: ${BRAND.strategySessionUrl}`,
     };
   }
 

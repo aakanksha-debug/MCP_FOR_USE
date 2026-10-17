@@ -5,6 +5,8 @@ The project is a Next.js app on Vercel that exposes one MCP endpoint (`/api/mcp`
 ```
 app/                         HTTP surface (Next.js route handlers and pages)
   api/mcp/route.ts           MCP endpoint
+  connect/[token]            Owner connects their website (consent + credentials)
+  approve/[token]            Owner reviews, approves, rejects or undoes staged fixes
   api/google/connect         One-time sign-in link → Google consent screen
   api/google/callback        OAuth callback → stores encrypted tokens
   page.tsx, privacy/         Landing and privacy pages
@@ -19,7 +21,9 @@ src/mcp/                     MCP layer: tool registration, schemas, formatting, 
 src/audits/                  One module per audit; each returns findings, never tiers
 src/policy/                  Issue catalog (tier, impact, wording, fixability), classification, scoring
 src/decision/                Verification against GSC/GA4 data and the Incrementors recommendation rules
-src/fixes/                   Fix generators (safe), drafts (approved medium), platform guidance, policy enforcement
+src/fixes/                   Fix generators (minor, content-only), drafts (approved medium), policy enforcement
+src/platforms/               Publishing adapters (WordPress), reversible content ops, website connections
+src/approvals/               Approval records, staging, publish and undo (owner-triggered only)
 src/integrations/            Google (OAuth, GSC, GA4), PageSpeed Insights, storage (Redis/memory, encryption)
 src/core/                    Safe fetching, HTML extraction, robots/sitemap parsing, per-call context, types
 src/config/                  Environment access and Incrementors brand/service links
@@ -37,7 +41,7 @@ src/config/                  Environment access and Incrementors brand/service l
 
 - **Audits observe, policy decides.** Audits never assign risk. Changing what counts as high-risk is a one-line edit in `src/policy/catalog.ts`, and `prepare_fixes` picks it up automatically.
 - **Integrations feed data, decisions interpret it.** `verify.ts` is pure: the tool layer fetches GSC/GA4 data and passes it in, so the rules are unit-tested without Google.
-- **Fixes are generated, never applied.** Generators derive changes from what is already on the page and flag anything uncertain. Application belongs to Claude (when it has site access) or the user.
+- **Fixes are prepared by the MCP, published by the owner.** Generators derive changes from what is already on the page. Publishing happens only from the approval page, after the owner clicks Approve.
 
 ## Extending
 
@@ -47,7 +51,11 @@ src/config/                  Environment access and Incrementors brand/service l
 
 **Add an integration** (for example Bing Webmaster Tools, Ahrefs, Semrush, Google Business Profile API): put the client under `src/integrations/<provider>/`, map its data to a provider-neutral shape (see `SearchRow` in `src/core/search-data.ts`), and feed it into the decision layer. Register its tools in a new file under `src/mcp/tools/` and add it in `src/mcp/server.ts`.
 
-**Apply fixes directly** (WordPress REST API, Shopify Admin API, a GitHub repo): add an applier that takes the `FixChange` objects from `prepareFixes`. Keep the tier check in `src/fixes/plan.ts` in front of it so high-risk changes can never be applied.
+**Add a publishing platform** (Shopify, Webflow, a GitHub repo): implement `PlatformAdapter` in `src/platforms/<name>.ts` (`verify`, `plan`, `applyBatch`, `revertBatch`), register it in `src/platforms/index.ts`, and add its credential form to `app/connect/[token]`. Keep adapters to content-level edits; the tier check in `src/fixes/plan.ts` already keeps expert-only issues away from them.
+
+## Publishing model
+
+`prepare_fixes` produces content-level change requests (`seo-title`, `meta-description`, `image-alt`, `replace-link`, `tel-link`). With a website connection, `src/approvals/stage.ts` asks the adapter to *plan* them: it reads current values and turns each request into a concrete target and op, or a manual step it cannot do. Nothing is written. The plan becomes an approval record; only `src/approvals/publish.ts`, triggered by the owner's click on the approval page, writes to the site. Ops for one page are applied in a single write and the before/after content is kept, so undo restores it exactly, and refuses if the page was edited since.
 
 ## Google connection model
 

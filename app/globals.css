@@ -65,3 +65,67 @@ code {
 .grid .card { margin: 0; }
 .grid h3 { margin: 0 0 4px; font-size: 16px; }
 .grid p { margin: 0; font-size: 14px; }
+
+/* Connect and approval pages */
+:root {
+  --ok: #1f7a4d;
+  --ok-bg: #e8f5ee;
+  --warn: #a33a2b;
+  --warn-bg: #fbecea;
+  --muted-bg: #f0f0ec;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --ok: #6fd3a0;
+    --ok-bg: #16301f;
+    --warn: #f19a8c;
+    --warn-bg: #3a1d19;
+    --muted-bg: #262623;
+  }
+}
+
+label { display: block; font-weight: 600; margin: 14px 0 6px; }
+input[type="text"], input[type="password"], input[type="url"] {
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+}
+input[readonly] { background: var(--muted-bg); }
+.check { display: flex; gap: 10px; align-items: flex-start; font-weight: 400; color: var(--text); }
+.check input { margin-top: 5px; }
+
+.button {
+  display: inline-block;
+  border: 0;
+  border-radius: 8px;
+  padding: 11px 18px;
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+  background: var(--accent);
+  color: #fff;
+  text-decoration: none;
+}
+.button.secondary { background: var(--muted-bg); color: var(--text); }
+.button.small { padding: 6px 12px; font-size: 14px; }
+.actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 18px; }
+
+.alert { border-radius: 10px; padding: 14px 16px; margin: 16px 0; }
+.alert.ok { background: var(--ok-bg); color: var(--ok); }
+.alert.warn { background: var(--warn-bg); color: var(--warn); }
+.alert p, .alert li { color: inherit; }
+.alert h2 { margin-top: 0; color: inherit; }
+
+.change { border-top: 1px solid var(--border); padding: 12px 0; }
+.change:first-of-type { border-top: 0; }
+.diff { display: grid; grid-template-columns: 70px 1fr; gap: 4px 10px; font-size: 14px; margin-top: 6px; }
+.diff dt { color: var(--muted); }
+.diff dd { margin: 0; word-break: break-word; }
+.status { font-size: 13px; font-weight: 600; }
+.status.published { color: var(--ok); }
+.status.failed, .status.reverted { color: var(--warn); }

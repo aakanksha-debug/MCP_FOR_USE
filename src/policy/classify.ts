@@ -25,6 +25,7 @@ export function classify(findings: Finding[]): Issue[] {
       recommendation: definition.recommendation,
       expertise: definition.expertise,
       fixPolicy: TIERS[definition.tier].policy,
+      ...(definition.expertReason ? { expertReason: definition.expertReason } : {}),
       ...(definition.fix ? { fix: definition.fix } : {}),
     });
   }

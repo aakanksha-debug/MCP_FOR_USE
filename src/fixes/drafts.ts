@@ -1,5 +1,5 @@
 import type { PageData } from "@/core/extract";
-import { brandCandidates, digitsOnly } from "@/audits/shared";
+import { digitsOnly } from "@/audits/shared";
 import { suggestTitle } from "./generators";
 
 /**
@@ -16,44 +16,6 @@ export interface Draft {
 }
 
 type Drafter = (page: PageData) => Draft;
-
-const jsonLd = (data: unknown) => `<script type="application/ld+json">\n${JSON.stringify(data, null, 2)}\n</script>`;
-
-function organizationDraft(page: PageData, type: "Organization" | "LocalBusiness"): Draft {
-  const brand = brandCandidates(page)[0] ?? "TODO: official business name";
-  const phone = page.telLinks[0] ?? page.phonesInText[0];
-  const data: Record<string, unknown> = {
-    "@context": "https://schema.org",
-    "@type": type,
-    name: brand,
-    url: `${new URL(page.url).origin}/`,
-    logo: page.og["og:image"] ?? "TODO: absolute URL of your logo",
-    ...(phone ? { telephone: phone } : {}),
-    ...(type === "LocalBusiness"
-      ? {
-          address: {
-            "@type": "PostalAddress",
-            streetAddress: "TODO",
-            addressLocality: "TODO",
-            addressRegion: "TODO",
-            postalCode: "TODO",
-            addressCountry: "TODO",
-          },
-          openingHours: "TODO e.g. Mo-Fr 09:00-17:00",
-        }
-      : {}),
-    ...(page.socialLinks.length ? { sameAs: page.socialLinks.slice(0, 10) } : {}),
-  };
-  return {
-    summary: `${type} markup prefilled with details found on the site`,
-    draft: jsonLd(data),
-    guidance: [
-      "Replace every TODO with the exact details from your Google Business Profile.",
-      type === "LocalBusiness" ? "Use the most specific type that fits (for example Dentist, Plumber, LegalService)." : "Use LocalBusiness instead if customers visit a physical location.",
-      "Validate with Google's Rich Results Test before publishing.",
-    ],
-  };
-}
 
 const DRAFTERS: Record<string, Drafter> = {
   "seo.h1.missing": (page) => ({
@@ -101,9 +63,6 @@ const DRAFTERS: Record<string, Drafter> = {
       "Ask the user for their audience, location and strongest differentiator before writing it.",
     ],
   }),
-  "geo.entity.organization_schema_missing": (page) => organizationDraft(page, "Organization"),
-  "schema.organization.missing": (page) => organizationDraft(page, "Organization"),
-  "gbp.site.localbusiness_schema_missing": (page) => organizationDraft(page, "LocalBusiness"),
   "aeo.answers.not_direct": (page) => ({
     summary: "Lead each answer with a direct 1-2 sentence answer",
     guidance: [

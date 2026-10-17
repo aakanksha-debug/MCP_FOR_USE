@@ -2,20 +2,19 @@ import type { AuditContext } from "@/core/context";
 import type { PageData } from "@/core/extract";
 import type { Tier } from "@/core/types";
 import { normalizeTargetUrl } from "@/core/url-guard";
+import { BRAND } from "@/config/brand";
 import { getIssueDefinition } from "@/policy/catalog";
-import { aeoFindings } from "@/audits/aeo";
-import { pageSchemaFindings } from "@/audits/schema";
 import { pageSeoFindings } from "@/audits/seo-health";
 import { isOkHtml } from "@/audits/shared";
 import { draftFor, type Draft } from "./drafts";
-import { fixGenerator, type FixChange } from "./generators";
-import { whereToApply, type Platform } from "./platforms";
+import { fixGenerator, type FixChange, type FixOptions } from "./generators";
+import { whereToApply, type Platform } from "./where-to-apply";
 
 /**
- * Enforces the three-tier change policy server-side:
- * 🟢 safe   → exact fix prepared
+ * Enforces the change policy server-side:
+ * 🟢 safe   → exact content fix prepared (published only after owner approval)
  * 🟡 medium → proposal only, unless the user approved the issue code
- * 🔴 high   → never fixed; expert review recommended
+ * 🔴 high   → never fixed: high-risk, or needs plugin/theme/code/server work
  */
 
 export interface FixRequestItem {
@@ -27,7 +26,7 @@ export type FixOutcome =
   | { status: "ready"; changes: (FixChange & { whereToApply: string })[] }
   | { status: "needs-approval"; proposal: string }
   | { status: "draft"; draft: Draft }
-  | { status: "expert-review"; reason: string }
+  | { status: "expert-review"; reason: string; whatIsNeeded: string }
   | { status: "not-detected"; reason: string }
   | { status: "error"; reason: string };
 
@@ -40,25 +39,23 @@ export interface FixResult {
 }
 
 const MAX_PAGES = 5;
-const SITE_FILE = /^\/(robots\.txt|llms\.txt|[\w-]*sitemap[\w-]*\.xml)$/i;
 
-/** Codes whose presence can be re-checked on a single page. */
-function presentCodes(page: PageData): Set<string> {
-  const codes = new Set<string>();
-  for (const finding of pageSeoFindings(page)) codes.add(finding.code);
-  for (const finding of pageSchemaFindings(page).findings) codes.add(finding.code);
-  for (const finding of aeoFindings(page).findings) codes.add(finding.code);
-  if (!page.lang) codes.add("technical.lang.missing");
-  if (page.phonesInText.length && !page.telLinks.length) codes.add("conversion.phone.not_clickable");
-  return codes;
+/** Safe issues whose presence can be re-checked on the page before fixing. */
+const RECHECKABLE = /^(seo\.(title|meta_description|images)|conversion\.phone\.not_clickable)/;
+
+function stillPresent(code: string, page: PageData): boolean {
+  if (code === "conversion.phone.not_clickable") return page.phonesInText.length > 0 && page.telLinks.length === 0;
+  return pageSeoFindings(page).some((finding) => finding.code === code);
 }
 
-const RECHECKABLE = /^(seo\.(title|meta_description|images|open_graph)|schema\.|aeo\.faq_schema|technical\.lang|conversion\.phone\.not_clickable)/;
+export function expertWarning(reason: string): string {
+  return `⚠️ Needs expert advice: ${reason}. The MCP will not make this change, because done wrong it can break the site or hurt rankings. Contact an ${BRAND.strategistLabel}: ${BRAND.strategySessionUrl}`;
+}
 
 export async function prepareFixes(
   ctx: AuditContext,
   items: FixRequestItem[],
-  options: { approvedCodes?: string[]; platform?: Platform } = {},
+  options: { approvedCodes?: string[]; platform?: Platform } & FixOptions = {},
 ): Promise<FixResult[]> {
   const approved = new Set(options.approvedCodes ?? []);
   const platform = options.platform ?? "html";
@@ -78,7 +75,8 @@ export async function prepareFixes(
         ...base,
         outcome: {
           status: "expert-review",
-          reason: `${definition.recommendation} This is a high-risk change, so it is not prepared automatically.`,
+          reason: expertWarning(definition.expertReason ?? "High-risk change"),
+          whatIsNeeded: definition.recommendation,
         },
       });
       continue;
@@ -86,9 +84,7 @@ export async function prepareFixes(
 
     let url: string;
     try {
-      const target = normalizeTargetUrl(item.url);
-      // Site-level issues are reported on the file URL; fixes are built from the homepage.
-      url = SITE_FILE.test(target.pathname) ? `${target.origin}/` : target.toString();
+      url = normalizeTargetUrl(item.url).toString();
     } catch (error) {
       results.push({ ...base, outcome: { status: "error", reason: (error as Error).message } });
       continue;
@@ -105,16 +101,17 @@ export async function prepareFixes(
     }
 
     if (definition.tier === "medium") {
-      if (!approved.has(item.code)) {
-        results.push({ ...base, outcome: { status: "needs-approval", proposal: definition.recommendation } });
-      } else {
-        results.push({ ...base, outcome: { status: "draft", draft: draftFor(item.code, page, definition.recommendation) } });
-      }
+      results.push({
+        ...base,
+        outcome: approved.has(item.code)
+          ? { status: "draft", draft: draftFor(item.code, page, definition.recommendation) }
+          : { status: "needs-approval", proposal: definition.recommendation },
+      });
       continue;
     }
 
     // Safe tier: confirm the issue still exists, then generate the exact fix.
-    if (RECHECKABLE.test(item.code) && !presentCodes(page).has(item.code)) {
+    if (RECHECKABLE.test(item.code) && !stillPresent(item.code, page)) {
       results.push({ ...base, outcome: { status: "not-detected", reason: "The issue was not found on the page now; it may already be fixed." } });
       continue;
     }
@@ -123,7 +120,7 @@ export async function prepareFixes(
       continue;
     }
     try {
-      const changes = await fixGenerator(definition.fix)(page, ctx);
+      const changes = await fixGenerator(definition.fix)(page, ctx, options.altText ? { altText: options.altText } : {});
       results.push(
         changes.length
           ? { ...base, outcome: { status: "ready", changes: changes.map((change) => ({ ...change, whereToApply: whereToApply(platform, change.target) })) } }
@@ -135,4 +132,3 @@ export async function prepareFixes(
   }
   return results;
 }
-

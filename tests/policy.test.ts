@@ -38,3 +38,34 @@ describe("issue catalog", () => {
     expect(issues[1]?.fixPolicy).toBe("auto-fix");
   });
 });
+
+describe("expert-only policy", () => {
+  const definitions = listIssueDefinitions();
+
+  it("gives every high-tier issue a reason an expert is needed", () => {
+    for (const definition of definitions.filter((d) => d.tier === "high")) {
+      expect(definition.expertReason, definition.code).toBeTruthy();
+    }
+  });
+
+  it("never auto-fixes snippets, files, themes, plugins or server settings", () => {
+    const codeLevel = [
+      "seo.open_graph.missing",
+      "technical.lang.missing",
+      "technical.sitemap.not_in_robots",
+      "aeo.faq_schema.missing",
+      "geo.llms_txt.missing",
+      "geo.entity.same_as_missing",
+      "schema.website.missing",
+      "schema.breadcrumb.missing",
+      "gbp.site.localbusiness_schema_missing",
+    ];
+    for (const code of codeLevel) {
+      const definition = definitions.find((d) => d.code === code)!;
+      expect(definition.tier, code).toBe("high");
+      expect(definition.fix, code).toBeUndefined();
+    }
+    const fixable = definitions.filter((d) => d.fix).map((d) => d.fix);
+    expect(new Set(fixable)).toEqual(new Set(["title", "meta-description", "alt-text", "broken-link", "tel-link"]));
+  });
+});

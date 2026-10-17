@@ -2,15 +2,17 @@ import type { AuditContext } from "@/core/context";
 import type { PageData } from "@/core/extract";
 import type { FixKind } from "@/core/types";
 import { brandCandidates, comparableUrl, findBrokenInternalLinks, keywordTokens } from "@/audits/shared";
-import { topLevelNodes } from "@/audits/schema";
+import type { ChangeRequest } from "@/platforms/types";
 
 /**
- * Fix generators for safe (🟢) issues. Each returns exact, ready-to-apply
- * changes derived from what is already on the page. They never invent
- * business facts; anything uncertain is flagged in `notes` for the user.
+ * Fix generators for safe (🟢) issues: content-level changes only. Each
+ * returns the exact change derived from what is already on the page, plus a
+ * platform-neutral `request` that a connected website can publish after the
+ * owner approves it. They never invent business facts; anything uncertain is
+ * flagged in `notes`.
  */
 
-export type FixTarget = "head" | "html-tag" | "body-element" | "json-ld" | "robots.txt" | "llms.txt" | "image-alt" | "link";
+export type FixTarget = "head" | "body-element" | "image-alt" | "link";
 
 export interface FixChange {
   target: FixTarget;
@@ -18,9 +20,16 @@ export interface FixChange {
   before?: string;
   after: string;
   notes?: string[];
+  /** Present when the change can be published through a connected platform. */
+  request?: ChangeRequest;
 }
 
-export type FixGenerator = (page: PageData, ctx: AuditContext) => Promise<FixChange[]>;
+export interface FixOptions {
+  /** Better alt text supplied by Claude after looking at the images. */
+  altText?: { src: string; alt: string }[];
+}
+
+export type FixGenerator = (page: PageData, ctx: AuditContext, options: FixOptions) => Promise<FixChange[]>;
 
 const escapeHtml = (value: string) =>
   value.replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
@@ -85,10 +94,6 @@ export function altFromFilename(src: string): string {
   return name.charAt(0).toUpperCase() + name.slice(1).toLowerCase();
 }
 
-function jsonLdScript(data: unknown): string {
-  return `<script type="application/ld+json">\n${JSON.stringify(data, null, 2)}\n</script>`;
-}
-
 function pathSimilarity(a: string, b: string): number {
   const tokens = (url: string) => {
     try {
@@ -111,9 +116,10 @@ const GENERATORS: Record<FixKind, FixGenerator> = {
       {
         target: "head",
         description: "Set the page title",
-        ...(page.title ? { before: `<title>${escapeHtml(page.title)}</title>` } : {}),
-        after: `<title>${escapeHtml(after)}</title>`,
+        ...(page.title ? { before: page.title } : {}),
+        after,
         notes: ["Built from the page's own H1 and brand name. Adjust wording if the main keyword should come first."],
+        request: { kind: "seo-title", pageUrl: page.url, value: after },
       },
     ];
   },
@@ -124,27 +130,33 @@ const GENERATORS: Record<FixKind, FixGenerator> = {
       {
         target: "head",
         description: "Set the meta description",
-        ...(page.metaDescription ? { before: `<meta name="description" content="${escapeHtml(page.metaDescription)}">` } : {}),
-        after: `<meta name="description" content="${escapeHtml(after)}">`,
+        ...(page.metaDescription ? { before: page.metaDescription } : {}),
+        after,
         notes: [`${after.length} characters, taken from the page's own copy. Add a call to action if it fits.`],
+        request: { kind: "meta-description", pageUrl: page.url, value: after },
       },
     ];
   },
 
-  async "alt-text"(page) {
+  async "alt-text"(page, _ctx, options) {
+    const supplied = new Map((options.altText ?? []).map((item) => [item.src, item.alt.trim()]));
     return page.images
       .filter((image) => image.alt === null)
       .slice(0, 30)
       .map((image) => {
-        const suggestion = image.context ?? altFromFilename(image.src);
+        const fromClaude = supplied.get(image.src);
+        const suggestion = fromClaude || image.context || altFromFilename(image.src);
         return {
           target: "image-alt" as const,
           description: `Add alt text to ${image.src}`,
-          before: `<img src="${escapeHtml(image.src)}">`,
-          after: `<img src="${escapeHtml(image.src)}" alt="${escapeHtml(suggestion)}">`,
-          notes: suggestion
-            ? ["Suggested from the file name or caption. Check that it describes the image; Claude can look at the image to improve it."]
-            : ['No usable hint in the file name. Describe the image, or use alt="" if it is purely decorative.'],
+          before: "(no alt text)",
+          after: suggestion || '(needs a description, or alt="" if decorative)',
+          notes: fromClaude
+            ? ["Written after looking at the image."]
+            : suggestion
+              ? ["Suggested from the file name or caption. Check that it describes the image; Claude can look at the image and pass better alt text."]
+              : ["No usable hint in the file name, so this one needs a human description."],
+          ...(suggestion ? { request: { kind: "image-alt" as const, pageUrl: page.url, src: image.src, alt: suggestion } } : {}),
         };
       });
   },
@@ -165,203 +177,28 @@ const GENERATORS: Record<FixKind, FixGenerator> = {
       return {
         target: "link" as const,
         description: `Fix link "${item.anchor || item.url}" (returns ${item.status})`,
-        before: `href="${item.url}"`,
-        after: replacement ? `href="${replacement}"` : "Remove the link (keep the text) or point it to the most relevant live page",
+        before: item.url,
+        after: replacement ?? "Remove the link (keep the text) or point it to the most relevant live page",
         notes: replacement
           ? ["Closest matching live URL by path. Confirm it is the right destination."]
-          : ["No close match found among known pages."],
+          : ["No close match found among known pages, so this one needs a human decision."],
+        ...(replacement ? { request: { kind: "replace-link" as const, pageUrl: page.url, from: item.url, to: replacement } } : {}),
       };
     });
-  },
-
-  async "open-graph"(page) {
-    const brand = primaryBrand(page);
-    const image = page.og["og:image"] ?? page.images.find((img) => /\.(jpe?g|png|webp)(\?|$)/i.test(img.src))?.src;
-    const tags = [
-      `<meta property="og:title" content="${escapeHtml(page.title ?? suggestTitle(page))}">`,
-      `<meta property="og:description" content="${escapeHtml(page.metaDescription ?? suggestMetaDescription(page))}">`,
-      `<meta property="og:url" content="${escapeHtml(page.canonicals[0] ?? page.url)}">`,
-      `<meta property="og:type" content="${page.schemaTypes.some((type) => /Article|BlogPosting/.test(type)) ? "article" : "website"}">`,
-      ...(brand ? [`<meta property="og:site_name" content="${escapeHtml(brand)}">`] : []),
-      ...(image ? [`<meta property="og:image" content="${escapeHtml(image)}">`] : []),
-    ];
-    return [
-      {
-        target: "head",
-        description: "Add Open Graph tags",
-        after: tags.join("\n"),
-        notes: image ? ["Ideal share image size is 1200x630."] : ["No suitable image found; add og:image with a 1200x630 image."],
-      },
-    ];
-  },
-
-  async "robots-sitemap-line"(page, ctx) {
-    const origin = new URL(page.url).origin;
-    const [robots, sitemap] = await Promise.all([ctx.fetch(`${origin}/robots.txt`, { accept: "text/plain" }), ctx.sitemap(origin)]);
-    const sitemapUrl = sitemap.sources[0] ?? `${origin}/sitemap.xml`;
-    const before = robots.ok ? robots.body.trimEnd() : "";
-    return [
-      {
-        target: "robots.txt",
-        description: "Reference the sitemap in robots.txt",
-        ...(before ? { before } : {}),
-        after: `${before}${before ? "\n\n" : ""}Sitemap: ${sitemapUrl}`,
-        notes: ["Only a Sitemap line is added; existing rules are unchanged."],
-      },
-    ];
-  },
-
-  async "html-lang"(page) {
-    const fromHeader = page.headers["content-language"]?.split(",")[0]?.trim();
-    const fromOg = page.og["og:locale"]?.replace("_", "-");
-    const lang = fromHeader || fromOg?.split("-")[0] || "en";
-    return [
-      {
-        target: "html-tag",
-        description: "Declare the page language",
-        before: "<html>",
-        after: `<html lang="${escapeHtml(lang)}">`,
-        notes: fromHeader || fromOg ? [`Detected from ${fromHeader ? "the Content-Language header" : "og:locale"}.`] : ["Assumed English; change if the site is in another language."],
-      },
-    ];
-  },
-
-  async "faq-schema"(page) {
-    const pairs = page.questions.filter((question) => question.answerWords >= 5).slice(0, 20);
-    if (pairs.length < 2) return [];
-    const data = {
-      "@context": "https://schema.org",
-      "@type": "FAQPage",
-      mainEntity: pairs.map((pair) => ({
-        "@type": "Question",
-        name: pair.question,
-        acceptedAnswer: { "@type": "Answer", text: pair.answer },
-      })),
-    };
-    return [
-      {
-        target: "json-ld",
-        description: `Add FAQPage markup for ${pairs.length} visible questions`,
-        after: jsonLdScript(data),
-        notes: [
-          "Copied word-for-word from the visible FAQ; keep them in sync when the FAQ changes.",
-          "Google shows FAQ rich results only for some sites, but the markup still helps search and AI systems read the Q&A.",
-        ],
-      },
-    ];
-  },
-
-  async "llms-txt"(page, ctx) {
-    const origin = new URL(page.url).origin;
-    const brand = primaryBrand(page) ?? new URL(page.url).hostname;
-    const summary = page.metaDescription ?? suggestMetaDescription(page);
-    const navLinks = page.links.filter((link) => link.internal && link.inHeader && link.text && link.text.length <= 60);
-    const unique = new Map<string, string>();
-    for (const link of navLinks) if (!unique.has(comparableUrl(link.href))) unique.set(comparableUrl(link.href), `- [${link.text}](${link.href})`);
-    if (unique.size < 3) {
-      const sitemap = await ctx.sitemap(origin);
-      for (const entry of sitemap.entries.filter((e) => URL.canParse(e.loc)).slice(0, 15)) {
-        const slug = new URL(entry.loc).pathname.split("/").filter(Boolean).pop()?.replace(/[-_]/g, " ") ?? "Home";
-        if (!unique.has(comparableUrl(entry.loc))) unique.set(comparableUrl(entry.loc), `- [${slug}](${entry.loc})`);
-      }
-    }
-    const contact = [
-      ...page.telLinks.slice(0, 1).map((phone) => `- Phone: ${phone}`),
-      ...page.mailtoLinks.slice(0, 1).map((email) => `- Email: ${email}`),
-    ];
-    const content = [
-      `# ${brand}`,
-      "",
-      `> ${summary}`,
-      "",
-      "## Key pages",
-      ...[...unique.values()].slice(0, 15),
-      ...(contact.length ? ["", "## Contact", ...contact] : []),
-      "",
-    ].join("\n");
-    return [
-      {
-        target: "llms.txt",
-        description: `Publish ${origin}/llms.txt`,
-        after: content,
-        notes: ["Draft built from your navigation. Edit the summary so it states exactly what you do, for whom and where."],
-      },
-    ];
-  },
-
-  async "same-as"(page) {
-    if (!page.socialLinks.length) return [];
-    const organization = page.jsonLd
-      .flatMap((block) => (block.data ? topLevelNodes(block.data) : []))
-      .find((node) => {
-        const type = node["@type"];
-        const types = Array.isArray(type) ? type : [type];
-        return types.some((t) => typeof t === "string" && /Organization|LocalBusiness|Corporation/.test(t));
-      });
-    const sameAs = page.socialLinks.slice(0, 15);
-    return [
-      {
-        target: "json-ld",
-        description: "Link official profiles with sameAs",
-        after: organization ? jsonLdScript({ ...organization, sameAs }) : `"sameAs": ${JSON.stringify(sameAs, null, 2)}`,
-        notes: [
-          organization ? "Replaces the existing Organization block with the same data plus sameAs." : "Add this property to your Organization markup.",
-          "Only include profiles the business officially owns.",
-        ],
-      },
-    ];
   },
 
   async "tel-link"(page) {
     return page.phonesInText.slice(0, 5).map((phone) => {
-      const digits = phone.replace(/[^\d+]/g, "");
+      const href = `tel:${phone.replace(/[^\d+]/g, "")}`;
       return {
         target: "body-element" as const,
         description: `Make ${phone} tap-to-call`,
         before: phone,
-        after: `<a href="tel:${digits}">${escapeHtml(phone)}</a>`,
-        notes: digits.startsWith("+") ? [] : ["Add the country code to the tel: link (for example tel:+1...) for international callers."],
+        after: `<a href="${href}">${escapeHtml(phone)}</a>`,
+        notes: href.startsWith("tel:+") ? [] : ["Add the country code to the tel: link (for example tel:+1...) for international callers."],
+        request: { kind: "tel-link" as const, pageUrl: page.url, text: phone, href },
       };
     });
-  },
-
-  async "schema-context"(page) {
-    return page.jsonLd
-      .filter((block) => block.data && !Array.isArray(block.data) && !("@context" in (block.data as object)))
-      .map((block) => ({
-        target: "json-ld" as const,
-        description: "Add @context to JSON-LD",
-        before: block.raw.slice(0, 300),
-        after: jsonLdScript({ "@context": "https://schema.org", ...(block.data as object) }),
-      }));
-  },
-
-  async "website-schema"(page) {
-    const brand = primaryBrand(page);
-    const origin = `${new URL(page.url).origin}/`;
-    return [
-      {
-        target: "json-ld",
-        description: "Add WebSite markup to the homepage",
-        after: jsonLdScript({ "@context": "https://schema.org", "@type": "WebSite", name: brand ?? new URL(page.url).hostname, url: origin }),
-        notes: brand ? [] : ["No brand name found; replace the hostname with your official site name."],
-      },
-    ];
-  },
-
-  async "breadcrumb-schema"(page) {
-    if (page.breadcrumb.length < 2) return [];
-    const data = {
-      "@context": "https://schema.org",
-      "@type": "BreadcrumbList",
-      itemListElement: page.breadcrumb.map((item, index) => ({
-        "@type": "ListItem",
-        position: index + 1,
-        name: item.name,
-        item: item.href ?? (index === page.breadcrumb.length - 1 ? page.url : undefined),
-      })),
-    };
-    return [{ target: "json-ld", description: "Add BreadcrumbList markup", after: jsonLdScript(data), notes: ["Mirrors the visible breadcrumb."] }];
   },
 };
 

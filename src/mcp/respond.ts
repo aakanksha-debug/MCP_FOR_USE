@@ -2,6 +2,7 @@ import type { CallToolResult } from "@modelcontextprotocol/server";
 import { AuditTargetError } from "@/audits";
 import { UnsafeUrlError } from "@/core/url-guard";
 import { GoogleIntegrationError } from "@/integrations/google/errors";
+import { PlatformError } from "@/platforms/types";
 
 export function text(markdown: string): CallToolResult {
   return { content: [{ type: "text", text: markdown }] };
@@ -17,7 +18,12 @@ export function guard<Args>(handler: (args: Args) => Promise<CallToolResult>): (
     try {
       return await handler(args);
     } catch (error) {
-      if (error instanceof AuditTargetError || error instanceof UnsafeUrlError || error instanceof GoogleIntegrationError) {
+      if (
+        error instanceof AuditTargetError ||
+        error instanceof UnsafeUrlError ||
+        error instanceof GoogleIntegrationError ||
+        error instanceof PlatformError
+      ) {
         return failure(error.message);
       }
       console.error("[mcp] tool failed", error);

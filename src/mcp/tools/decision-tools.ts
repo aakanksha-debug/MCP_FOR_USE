@@ -16,6 +16,8 @@ import {
   type VerificationData,
 } from "@/decision/verify";
 import { prepareFixes } from "@/fixes/plan";
+import { stageFixes } from "@/approvals/stage";
+import { loadSite } from "@/platforms/connections";
 import { getAccessToken } from "@/integrations/google/connections";
 import { recentRange } from "@/integrations/google/dates";
 import { pageReport } from "@/integrations/google/ga4";
@@ -24,7 +26,7 @@ import { resolveGscProperty } from "@/integrations/google/site-data";
 import { getIssueDefinition, listIssueDefinitions } from "@/policy/catalog";
 import { classify } from "@/policy/classify";
 import { TIERS } from "@/policy/tiers";
-import { formatFixes, formatVerification } from "../format";
+import { formatFixes, formatStaged, formatVerification } from "../format";
 import { failure, guard, text } from "../respond";
 import { auditIdField, connectionIdField, gscPropertyField, issueRefField, urlField } from "../schemas";
 
@@ -155,25 +157,48 @@ export function registerDecisionTools(server: McpServer): void {
   server.registerTool(
     "prepare_fixes",
     {
-      title: "Prepare safe fixes",
+      title: "Prepare fixes (nothing is published without approval)",
       description:
-        "Prepares fixes for audit issues without changing the website, enforcing the risk policy: 🟢 safe issues get exact ready-to-apply changes; 🟡 medium issues return a proposal unless their code is in approvedCodes (include a code ONLY after the user explicitly approved that change), in which case a draft is returned; 🔴 high-risk issues are never prepared and get an expert-review note.",
+        "ASK THE USER BEFORE CALLING. Prepares fixes for audit issues and enforces the change policy: 🟢 minor content issues (titles, meta descriptions, image alt text, broken links, tap-to-call) get exact changes; 🟡 medium issues return a proposal unless their code is in approvedCodes (include a code ONLY after the user explicitly approved it), then a draft; 🔴 issues (high-risk, or needing plugins, code snippets, theme or server changes) are never prepared and return an expert warning. With siteConnectionId (from connect_website), the minor fixes are staged on a private approval page: nothing is published until the site owner opens the link and clicks Approve. Without it, the fixes are returned for manual application.",
       inputSchema: z.object({
         issues: z.array(issueRefField).min(1).max(30),
         approvedCodes: z.array(z.string().max(100)).max(30).optional().describe("Medium-tier issue codes the user explicitly approved"),
+        siteConnectionId: z
+          .string()
+          .min(10)
+          .max(200)
+          .optional()
+          .describe("Website connection ID from connect_website, to stage fixes for owner approval and publishing"),
+        altText: z
+          .array(z.object({ src: z.string().max(2048), alt: z.string().min(1).max(250) }))
+          .max(30)
+          .optional()
+          .describe("Better alt text you wrote after looking at the images (image URL and alt text)"),
         platform: z
           .enum(["html", "wordpress", "shopify", "wix", "squarespace", "webflow", "other"])
           .optional()
-          .describe("Website platform, for where-to-apply instructions (ask the user if unknown)"),
+          .describe("Website platform, for manual where-to-apply instructions (ask the user if unknown)"),
       }),
       annotations: { readOnlyHint: true, openWorldHint: true },
     },
-    guard(async ({ issues, approvedCodes, platform }) => {
+    guard(async ({ issues, approvedCodes, siteConnectionId, altText, platform }) => {
       const results = await prepareFixes(createAuditContext(), issues, {
         ...(approvedCodes ? { approvedCodes } : {}),
         ...(platform ? { platform } : {}),
+        ...(altText ? { altText } : {}),
       });
-      return text(formatFixes(results));
+      if (!siteConnectionId) {
+        const hasPublishable = results.some((result) => result.outcome.status === "ready");
+        return text(
+          formatFixes(results) +
+            (hasPublishable
+              ? "\n\nTo publish the minor fixes after the owner approves them, ask the user for permission to connect their website (connect_website; WordPress supported)."
+              : ""),
+        );
+      }
+      const site = await loadSite(siteConnectionId);
+      const staged = await stageFixes(results, site);
+      return text(formatStaged(results, staged));
     }),
   );
 

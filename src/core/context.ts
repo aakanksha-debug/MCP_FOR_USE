@@ -51,7 +51,7 @@ export function createAuditContext(options: AuditContextOptions = {}): AuditCont
   const timeLeftMs = () => deadline - Date.now();
 
   const cachedFetch: Fetcher = (url, fetchOptions = {}) => {
-    if ((fetchOptions.method ?? "GET") !== "GET" || fetchOptions.followRedirects === false) {
+    if ((fetchOptions.method ?? "GET") !== "GET" || fetchOptions.followRedirects === false || fetchOptions.headers) {
       return fetcher(url, fetchOptions);
     }
     const key = `${url}|${fetchOptions.maxBytes ?? ""}|${fetchOptions.accept ?? ""}`;

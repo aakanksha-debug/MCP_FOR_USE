@@ -29,6 +29,8 @@ export const BRAND = {
   name: "Incrementors",
   site: `${SITE}/`,
   strategySessionUrl: `${SITE}/30-minutes-strategy-session/`,
+  /** Where expert-only issues send people: a free session with an SEO strategist. */
+  strategistLabel: "Incrementors SEO strategist",
   get contactUrl(): string {
     return contactUrlOverride() ?? `${SITE}/contact-us/`;
   },

@@ -4,7 +4,11 @@ import { allowPrivateHosts } from "@/config/env";
 import { assertFetchableUrl, isPublicAddress, UnsafeUrlError } from "./url-guard";
 
 export interface FetchOptions {
-  method?: "GET" | "HEAD";
+  method?: "GET" | "HEAD" | "POST" | "PUT" | "PATCH" | "DELETE";
+  /** Extra request headers (for example Authorization for CMS APIs). */
+  headers?: Record<string, string>;
+  /** Request body; sent as-is. Redirects are not followed for requests with a body. */
+  body?: string;
   /** Maximum response body to read; the rest is discarded. */
   maxBytes?: number;
   timeoutMs?: number;
@@ -155,7 +159,7 @@ export const safeFetch: Fetcher = async (input, options = {}) => {
   const method = options.method ?? "GET";
   const maxBytes = options.maxBytes ?? DEFAULT_MAX_BYTES;
   const timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS;
-  const followRedirects = options.followRedirects ?? true;
+  const followRedirects = (options.followRedirects ?? true) && options.body === undefined;
   const started = Date.now();
   const redirects: RedirectHop[] = [];
   let current = input;
@@ -180,7 +184,9 @@ export const safeFetch: Fetcher = async (input, options = {}) => {
           "user-agent": USER_AGENT,
           accept: options.accept ?? "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
           "accept-language": "en;q=0.9,*;q=0.5",
+          ...(options.headers ?? {}),
         },
+        ...(options.body !== undefined ? { body: options.body } : {}),
       });
     } catch (error) {
       return failure(input, url.toString(), redirects, started, error);
@@ -198,7 +204,7 @@ export const safeFetch: Fetcher = async (input, options = {}) => {
     let text = "";
     let total = 0;
     let truncated = false;
-    if (method === "GET") {
+    if (method !== "HEAD") {
       try {
         const read = await readBody(response.body as ReadableStream<Uint8Array> | null, maxBytes);
         text = new TextDecoder(charsetOf(headers["content-type"])).decode(read.bytes);

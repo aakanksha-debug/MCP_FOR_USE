@@ -47,9 +47,12 @@ export default function Home() {
 
       <h2>How changes are handled</h2>
       <ul>
-        <li>🟢 Minor, low-risk issues: exact fixes are prepared for you to apply.</li>
+        <li>🟢 Minor content fixes (titles, descriptions, alt text, links): prepared when you ask, and published only after you approve each change on a review page. Every change can be undone.</li>
         <li>🟡 Medium issues: recommendations first, drafts only after you approve.</li>
-        <li>🔴 High-risk issues (indexation, canonicals, redirects): never changed automatically; expert review recommended.</li>
+        <li>
+          🔴 Needs expert advice: high-risk changes and anything that needs plugins, code snippets, theme or server changes. Never
+          changed automatically; talk to an Incrementors SEO strategist.
+        </li>
       </ul>
 
       <p>

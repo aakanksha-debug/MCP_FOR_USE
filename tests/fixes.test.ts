@@ -21,35 +21,51 @@ describe("prepare_fixes policy", () => {
     expect(approved?.outcome.status).toBe("draft");
   });
 
-  it("prepares exact fixes for safe issues with platform guidance", async () => {
+  it("prepares exact content fixes for minor issues, with publishable requests", async () => {
     const results = await run([
       { code: "seo.meta_description.missing", url: HOME },
-      { code: "aeo.faq_schema.missing", url: HOME },
-      { code: "technical.sitemap.not_in_robots", url: `${ORIGIN}/robots.txt` },
       { code: "seo.links.broken_internal", url: HOME },
       { code: "conversion.phone.not_clickable", url: HOME },
+      { code: "seo.images.missing_alt", url: HOME },
     ]);
     for (const result of results) expect(result.outcome.status, result.code).toBe("ready");
 
     const meta = results[0]!.outcome;
     if (meta.status !== "ready") throw new Error("expected ready");
-    expect(meta.changes[0]?.after).toMatch(/^<meta name="description" content="Acme Plumbing provides/);
+    expect(meta.changes[0]?.after).toMatch(/^Acme Plumbing provides/);
     expect(meta.changes[0]?.whereToApply).toContain("SEO plugin");
+    expect(meta.changes[0]?.request).toMatchObject({ kind: "meta-description", pageUrl: HOME });
 
-    const faq = results[1]!.outcome;
-    if (faq.status !== "ready") throw new Error("expected ready");
-    const json = JSON.parse(faq.changes[0]!.after.replace(/^<script[^>]*>|<\/script>$/g, ""));
-    expect(json["@type"]).toBe("FAQPage");
-    expect(json.mainEntity).toHaveLength(3);
-
-    const robots = results[2]!.outcome;
-    if (robots.status !== "ready") throw new Error("expected ready");
-    expect(robots.changes[0]?.after).toContain(`Sitemap: ${ORIGIN}/sitemap.xml`);
-    expect(robots.changes[0]?.after).toContain("User-agent: GPTBot");
-
-    const tel = results[4]!.outcome;
+    const tel = results[2]!.outcome;
     if (tel.status !== "ready") throw new Error("expected ready");
-    expect(tel.changes[0]?.after).toBe('<a href="tel:5125550147">(512) 555-0147</a>');
+    expect(tel.changes[0]?.request).toEqual({ kind: "tel-link", pageUrl: HOME, text: "(512) 555-0147", href: "tel:5125550147" });
+
+    const alt = results[3]!.outcome;
+    if (alt.status !== "ready") throw new Error("expected ready");
+    expect(alt.changes.find((change) => change.request?.kind === "image-alt")?.request).toMatchObject({ alt: "Team" });
+  });
+
+  it("uses alt text supplied by Claude", async () => {
+    const [result] = await prepareFixes(createAuditContext({ fetcher: siteFetcher() }), [{ code: "seo.images.missing_alt", url: HOME }], {
+      altText: [{ src: `${ORIGIN}/images/team-photo_1200x800.jpg`, alt: "Three Acme plumbers next to a service van" }],
+    });
+    if (result?.outcome.status !== "ready") throw new Error("expected ready");
+    expect(result.outcome.changes[0]?.after).toBe("Three Acme plumbers next to a service van");
+  });
+
+  it("routes snippet, file and theme fixes to an Incrementors strategist", async () => {
+    const results = await run([
+      { code: "aeo.faq_schema.missing", url: HOME },
+      { code: "technical.sitemap.not_in_robots", url: `${ORIGIN}/robots.txt` },
+      { code: "technical.lang.missing", url: HOME },
+    ]);
+    for (const result of results) {
+      expect(result.outcome.status, result.code).toBe("expert-review");
+      if (result.outcome.status === "expert-review") {
+        expect(result.outcome.reason).toContain("Needs expert advice");
+        expect(result.outcome.reason).toContain("Incrementors SEO strategist");
+      }
+    }
   });
 
   it("reports when a safe issue is no longer present", async () => {

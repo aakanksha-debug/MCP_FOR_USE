@@ -65,7 +65,8 @@ describe("expertRecommendation", () => {
   it("recommends technical SEO for high-risk issues", () => {
     const rec = expertRecommendation(classify([{ code: "technical.canonical.points_elsewhere", url: "https://x.test/a" }]));
     expect(rec?.area).toBe("technical-seo");
-    expect(rec?.text).toContain("https://www.incrementors.com/seo-services/");
+    expect(rec?.text).toContain("Incrementors SEO strategist");
+    expect(rec?.text).toContain("https://www.incrementors.com/30-minutes-strategy-session/");
   });
 
   it("needs several medium issues in one area, or confirmed impact", () => {

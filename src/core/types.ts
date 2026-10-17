@@ -16,22 +16,12 @@ export type AuditId =
   | "schema"
   | "content";
 
-/** Fix generators available for safe issues (see src/fixes). */
-export type FixKind =
-  | "title"
-  | "meta-description"
-  | "alt-text"
-  | "broken-link"
-  | "open-graph"
-  | "robots-sitemap-line"
-  | "html-lang"
-  | "faq-schema"
-  | "llms-txt"
-  | "same-as"
-  | "tel-link"
-  | "schema-context"
-  | "website-schema"
-  | "breadcrumb-schema";
+/**
+ * Fix generators for safe issues. Only content-level changes (text, alt
+ * text, links) qualify; anything needing code, theme, plugin or server
+ * changes is expert-only by policy.
+ */
+export type FixKind = "title" | "meta-description" | "alt-text" | "broken-link" | "tel-link";
 
 /** Static definition of an issue type. Lives in the policy catalog. */
 export interface IssueDefinition {
@@ -43,6 +33,8 @@ export interface IssueDefinition {
   why: string;
   recommendation: string;
   expertise: ExpertiseArea;
+  /** Why an expert is needed (high tier only): risk, or theme/plugin/code work. */
+  expertReason?: string;
   /** Present only on safe issues that have a fix generator. */
   fix?: FixKind;
 }
@@ -67,6 +59,7 @@ export interface Issue extends Finding {
   recommendation: string;
   expertise: ExpertiseArea;
   fixPolicy: FixPolicy;
+  expertReason?: string;
   fix?: FixKind;
 }
 
