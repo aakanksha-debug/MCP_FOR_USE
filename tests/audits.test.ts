@@ -209,3 +209,29 @@ describe("brand detection", () => {
     expect(brandCandidates(page)).toEqual(["Incrementors"]);
   });
 });
+
+describe("pages meant to stay out of search", () => {
+  it("does not flag noindex or missing schema on search, cart and login pages", async () => {
+    const { pageSeoFindings } = await import("@/audits/seo-health");
+    const { pageSchemaFindings } = await import("@/audits/schema");
+    const { extractPage } = await import("@/core/extract");
+    const page = (url: string) =>
+      extractPage({
+        requestedUrl: url,
+        url,
+        status: 200,
+        ok: true,
+        headers: { "content-type": "text/html" },
+        redirects: [],
+        body: '<html><head><title>Search results for plumbers</title><meta name="robots" content="noindex,follow"></head><body><h1>Search</h1></body></html>',
+        bytes: 1,
+        truncated: false,
+        timingMs: 1,
+      });
+    for (const url of ["https://x.test/search", "https://x.test/?s=plumber", "https://x.test/cart/", "https://x.test/my-account/"]) {
+      expect(pageSeoFindings(page(url)).map((f) => f.code), url).not.toContain("technical.noindex");
+      expect(pageSchemaFindings(page(url)).findings.map((f) => f.code), url).not.toContain("schema.none");
+    }
+    expect(pageSeoFindings(page("https://x.test/services/")).map((f) => f.code)).toContain("technical.noindex");
+  });
+});

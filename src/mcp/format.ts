@@ -264,7 +264,7 @@ export function countGroups(groups: IssueGroup[]): Record<Tier, number> {
 function actionFor(group: IssueGroup): string {
   if (group.tier === "safe") return `🟢 Can be fixed safely with your permission: ${group.recommendation}`;
   if (group.tier === "medium") return `🟡 Needs your review: ${group.recommendation}`;
-  return `🔴 Needs expert advice (${(group.expertReason ?? "high-risk change").toLowerCase()}): ${group.recommendation}`;
+  return `🔴 Needs expert advice. ${group.expertReason ?? "High-risk change"}. What an expert would do: ${group.recommendation}`;
 }
 
 function findingBlock(group: IssueGroup, index: number): string {

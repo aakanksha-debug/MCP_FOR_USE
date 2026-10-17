@@ -1,6 +1,6 @@
 import type { PageData } from "@/core/extract";
 import type { Finding } from "@/core/types";
-import { digitsOnly, isHomepage, isOkHtml, loadPages, loadTarget, pickSamplePages } from "./shared";
+import { digitsOnly, isHomepage, isNoindex, isNotForSearch, isOkHtml, loadPages, loadTarget, pickSamplePages } from "./shared";
 import { emptyOutput, type AuditModule } from "./types";
 
 export interface SchemaInput {
@@ -125,7 +125,7 @@ export function pageSchemaFindings(page: PageData): { findings: Finding[]; types
   const add = (code: string, detail?: string, evidence?: Record<string, unknown>) =>
     findings.push({ code, url: page.url, ...(detail ? { detail } : {}), ...(evidence ? { evidence } : {}) });
 
-  if (page.jsonLd.length === 0 && page.microdataTypes.length === 0) add("schema.none");
+  if (page.jsonLd.length === 0 && page.microdataTypes.length === 0 && !isNoindex(page) && !isNotForSearch(page.url)) add("schema.none");
 
   const invalid = page.jsonLd.filter((block) => block.error);
   if (invalid.length) add("schema.jsonld.invalid", invalid.map((block) => block.error).join("; "), { snippets: invalid.map((block) => block.raw.slice(0, 200)) });

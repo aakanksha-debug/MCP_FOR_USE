@@ -28,6 +28,17 @@ export function comparableUrl(url: string): string {
   }
 }
 
+/** Pages that are normally kept out of search results on purpose. */
+const NOT_FOR_SEARCH = /\/(search|cart|basket|checkout|my-account|account|login|log-in|signin|sign-in|register|signup|sign-up|logout|thank-you|thankyou|thanks|wp-admin|wp-login\.php|feed|preview)(\/|$|\?)|[?&](s|q|search)=/i;
+
+export function isNotForSearch(url: string): boolean {
+  return NOT_FOR_SEARCH.test(url);
+}
+
+export function isNoindex(page: { robotsMeta?: string; xRobotsTag?: string }): boolean {
+  return `${page.robotsMeta ?? ""} ${page.xRobotsTag ?? ""}`.toLowerCase().includes("noindex");
+}
+
 export function isHomepage(url: string): boolean {
   try {
     const parsed = new URL(url);

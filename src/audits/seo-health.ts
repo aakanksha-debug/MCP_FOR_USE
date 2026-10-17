@@ -4,6 +4,7 @@ import {
   comparableUrl,
   findBrokenInternalLinks,
   isHomepage,
+  isNotForSearch,
   isOkHtml,
   loadPages,
   loadTarget,
@@ -51,7 +52,8 @@ export function pageSeoFindings(page: PageData): Finding[] {
   if (!page.og["og:title"] && !page.og["og:image"]) add("seo.open_graph.missing");
 
   const robots = `${page.robotsMeta ?? ""} ${page.xRobotsTag ?? ""}`.toLowerCase();
-  if (robots.includes("noindex")) add("technical.noindex", `robots directive: "${robots.trim()}"`);
+  // Search, cart, login and similar pages are meant to stay out of Google.
+  if (robots.includes("noindex") && !isNotForSearch(page.url)) add("technical.noindex", `robots directive: "${robots.trim()}"`);
 
   const canonical = page.canonicals[0];
   if (canonical && comparableUrl(canonical) !== comparableUrl(page.url)) {
