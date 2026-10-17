@@ -141,7 +141,11 @@ const GENERATORS: Record<FixKind, FixGenerator> = {
         description: "Set the page title",
         ...(page.title ? { before: page.title } : {}),
         after,
-        notes: ["Built from the page's own H1 and brand name. Adjust wording if the main keyword should come first."],
+        notes: [
+          page.title && page.title.length > 60
+            ? "Shortened from the current title, keeping its main topic and the brand name."
+            : "Built from the page's own H1 and brand name. Adjust wording if the main keyword should come first.",
+        ],
         request: { kind: "seo-title", pageUrl: page.url, value: after },
       },
     ];
