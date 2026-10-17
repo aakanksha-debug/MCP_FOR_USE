@@ -54,16 +54,22 @@ function dependencies(): Dependencies {
   const config = googleOAuthConfig();
   const key = tokenEncryptionKey();
   if (!config || !key) {
+    console.warn(
+      `[google] Sign-in requested but not configured. Create a Google OAuth web client with redirect URI ${publicBaseUrl()}/api/google/callback and set GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET and TOKEN_ENCRYPTION_KEY (see docs/DEPLOYMENT.md).`,
+    );
     throw new GoogleIntegrationError(
-      `Google Search Console / GA4 connection is not configured on this server yet. Website audits still work without it. ` +
-        `(Server admin: create a Google OAuth web client with the redirect URI ${publicBaseUrl()}/api/google/callback, ` +
-        `then set GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET and TOKEN_ENCRYPTION_KEY. See docs/DEPLOYMENT.md.)`,
+      "Connecting Google Search Console and Analytics isn't available on this server yet. Your audit results are complete without it; the Google check only adds traffic and conversion data on top. (Server admin: the redirect URI to register is " +
+        `${publicBaseUrl()}/api/google/callback.)`,
       "not_configured",
     );
   }
   const store = getStore();
   if (!store) {
-    throw new GoogleIntegrationError("Token storage is not configured on this server, so Google cannot be connected yet.", "storage_unavailable");
+    console.warn("[google] Sign-in requested but no Redis storage is configured (add Upstash Redis in Vercel).");
+    throw new GoogleIntegrationError(
+      "Connecting Google Search Console and Analytics isn't available on this server yet. Your audit results are complete without it. (Server admin: add Upstash Redis storage in Vercel.)",
+      "storage_unavailable",
+    );
   }
   return { store, config, key };
 }

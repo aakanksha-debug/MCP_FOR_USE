@@ -73,9 +73,7 @@ export const conversionAudit: AuditModule<ConversionInput> = {
       forms: pages.flatMap((p) => p.forms.map((form) => ({ page: p.url, fields: form.fieldCount }))),
       contactPage: contactUrl ?? null,
     };
-    output.askUser.push(
-      "What is the main action you want visitors to take (call, form, booking or purchase)? Connecting GA4 shows whether visitors actually complete it.",
-    );
+    output.askUser.push("What is the main action you want visitors to take (call, form, booking or purchase)?");
     output.notes.push("CTA placement is estimated from the HTML order, not a rendered screenshot.");
     return output;
   },

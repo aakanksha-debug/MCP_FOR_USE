@@ -76,7 +76,7 @@ describe("Google connection lifecycle", () => {
   it("explains when Google is not configured", async () => {
     vi.stubEnv("GOOGLE_CLIENT_ID", "");
     const google = await import("@/integrations/google/connections");
-    await expect(google.createConnection()).rejects.toThrow(/not configured/);
+    await expect(google.createConnection()).rejects.toThrow(/isn.t available on this server yet/);
   });
 
   it("rejects malformed connection IDs", async () => {

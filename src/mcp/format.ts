@@ -47,11 +47,19 @@ function list(title: string, items: string[]): string {
   return items.length ? `\n\n**${title}**\n${items.map((item) => `- ${item}`).join("\n")}` : "";
 }
 
+/** Offered after audits when Google sign-in is available and not yet connected. */
+export const GOOGLE_OFFER =
+  "**🔗 Get data-backed results (optional): connect Google Search Console and Google Analytics.** Read-only, takes about a minute. I can then check which of these issues actually cost you traffic, clicks and conversions, pull the real questions people search for, and prioritize the fixes by impact. Say \"connect Google\" to start.";
+
+function googleOfferBlock(offer: boolean): string {
+  return offer ? `\n\n${GOOGLE_OFFER}` : "";
+}
+
 function recommendationBlock(recommendation: ExpertRecommendation | null): string {
   return recommendation ? `\n\n**Expert help (optional):** ${recommendation.text}` : "";
 }
 
-export function formatAuditResult(result: AuditResult, recommendation: ExpertRecommendation | null): string {
+export function formatAuditResult(result: AuditResult, recommendation: ExpertRecommendation | null, googleOffer = false): string {
   const counts = countByTier(result.issues);
   const header = [
     `## ${result.name}: ${result.target}`,
@@ -67,10 +75,11 @@ export function formatAuditResult(result: AuditResult, recommendation: ExpertRec
     list("Notes", result.notes),
     facts,
     recommendationBlock(recommendation),
+    googleOfferBlock(googleOffer),
   ].join("");
 }
 
-export function formatFullAudit(full: FullAuditResult, recommendation: ExpertRecommendation | null): string {
+export function formatFullAudit(full: FullAuditResult, recommendation: ExpertRecommendation | null, googleOffer = false): string {
   const counts = countByTier(full.issues);
   const scoreboard = full.results.map((result) => `| ${result.name} | ${result.score}/100 | ${result.issues.length} |`).join("\n");
   const askUser = [...new Set(full.results.flatMap((result) => result.askUser))];
@@ -88,6 +97,7 @@ export function formatFullAudit(full: FullAuditResult, recommendation: ExpertRec
     list("Ask the user", askUser),
     list("Notes", notes),
     recommendationBlock(recommendation),
+    googleOfferBlock(googleOffer),
   ].join("\n");
 }
 

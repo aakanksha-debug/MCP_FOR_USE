@@ -94,9 +94,7 @@ export const aeoAudit: AuditModule<AeoInput> = {
       tables: page.tableCount,
     };
     if (!questions.length) {
-      output.askUser.push(
-        "What 3-6 questions do customers ask most before buying? (Or connect Google Search Console so question searches can be pulled automatically.)",
-      );
+      output.askUser.push("What 3-6 questions do customers ask most before buying?");
     }
     output.notes.push("Question coverage uses keyword matching, so review borderline matches manually.");
     return output;

@@ -24,6 +24,11 @@ import { auditIdField, gbpProfileField, gscPropertyField, optionalConnectionIdFi
 
 const READ_ONLY = { readOnlyHint: true, openWorldHint: true, idempotentHint: true } as const;
 
+/** Always offer Google sign-in after an audit unless the user already connected it. */
+function offerGoogle(connectionId?: string): boolean {
+  return !connectionId;
+}
+
 async function optionalSearchRows(connectionId: string | undefined, url: string, property: string | undefined) {
   if (!connectionId) return { rows: undefined as SearchRow[] | undefined, note: undefined as string | undefined };
   try {
@@ -49,7 +54,7 @@ export function registerAuditTools(server: McpServer): void {
     },
     guard(async ({ url, maxPages }) => {
       const result = await runAudit(seoHealthAudit, createAuditContext(), { url, ...(maxPages ? { maxPages } : {}) });
-      return text(formatAuditResult(result, expertRecommendation(result.issues)));
+      return text(formatAuditResult(result, expertRecommendation(result.issues), offerGoogle()));
     }),
   );
 
@@ -64,7 +69,7 @@ export function registerAuditTools(server: McpServer): void {
     },
     guard(async ({ url, profile }) => {
       const result = await runAudit(gbpAudit, createAuditContext(), { url, ...(profile ? { profile } : {}) });
-      return text(formatAuditResult(result, expertRecommendation(result.issues)));
+      return text(formatAuditResult(result, expertRecommendation(result.issues), offerGoogle()));
     }),
   );
 
@@ -96,7 +101,7 @@ export function registerAuditTools(server: McpServer): void {
       }
       const result = await runAudit(aeoAudit, createAuditContext(), { url: target, questions: allQuestions });
       if (search.note) result.notes.push(search.note);
-      return text(formatAuditResult(result, expertRecommendation(result.issues)));
+      return text(formatAuditResult(result, expertRecommendation(result.issues), offerGoogle(googleConnectionId)));
     }),
   );
 
@@ -111,7 +116,7 @@ export function registerAuditTools(server: McpServer): void {
     },
     guard(async ({ url }) => {
       const result = await runAudit(geoAudit, createAuditContext(), { url });
-      return text(formatAuditResult(result, expertRecommendation(result.issues)));
+      return text(formatAuditResult(result, expertRecommendation(result.issues), offerGoogle()));
     }),
   );
 
@@ -126,7 +131,7 @@ export function registerAuditTools(server: McpServer): void {
     },
     guard(async ({ url }) => {
       const result = await runAudit(conversionAudit, createAuditContext(), { url });
-      return text(formatAuditResult(result, expertRecommendation(result.issues)));
+      return text(formatAuditResult(result, expertRecommendation(result.issues), offerGoogle()));
     }),
   );
 
@@ -145,7 +150,7 @@ export function registerAuditTools(server: McpServer): void {
     guard(async ({ url, includeCoreWebVitals }) => {
       const ctx = createAuditContext({ budgetMs: includeCoreWebVitals ? 55_000 : 45_000 });
       const result = await runAudit(technicalAudit, ctx, { url, includeCoreWebVitals: includeCoreWebVitals ?? false });
-      return text(formatAuditResult(result, expertRecommendation(result.issues)));
+      return text(formatAuditResult(result, expertRecommendation(result.issues), offerGoogle()));
     }),
   );
 
@@ -163,7 +168,7 @@ export function registerAuditTools(server: McpServer): void {
     },
     guard(async ({ url, maxPages }) => {
       const result = await runAudit(schemaAudit, createAuditContext(), { url, ...(maxPages ? { maxPages } : {}) });
-      return text(formatAuditResult(result, expertRecommendation(result.issues)));
+      return text(formatAuditResult(result, expertRecommendation(result.issues), offerGoogle()));
     }),
   );
 
@@ -192,7 +197,7 @@ export function registerAuditTools(server: McpServer): void {
         ...(search.rows ? { searchRows: search.rows } : {}),
       });
       if (search.note) result.notes.push(search.note);
-      return text(formatAuditResult(result, expertRecommendation(result.issues)));
+      return text(formatAuditResult(result, expertRecommendation(result.issues), offerGoogle(googleConnectionId)));
     }),
   );
 
@@ -225,7 +230,7 @@ export function registerAuditTools(server: McpServer): void {
         ...(search.rows ? { searchRows: search.rows } : {}),
       });
       if (search.note) full.results[0]?.notes.push(search.note);
-      return text(formatFullAudit(full, expertRecommendation(full.issues)));
+      return text(formatFullAudit(full, expertRecommendation(full.issues), offerGoogle(googleConnectionId)));
     }),
   );
 }
