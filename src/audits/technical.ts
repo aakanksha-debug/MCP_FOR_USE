@@ -138,6 +138,7 @@ export const technicalAudit: AuditModule<TechnicalInput> = {
     output.facts = {
       ...output.facts,
       finalUrl: page.url,
+      platform: page.platform?.name,
       status: page.status,
       redirects: page.redirects,
       responseTimeMs: page.timingMs,

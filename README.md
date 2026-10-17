@@ -24,7 +24,8 @@ A free MCP server (Claude connector) from [Incrementors](https://www.incrementor
 | | `prepare_fixes` | Exact fixes for minor issues (staged for owner approval when a website is connected), drafts for approved medium issues, expert warnings for everything else |
 | | `list_issue_types` | Every issue code with its risk tier |
 | | `get_expert_help` | Incrementors service details, only when the user asks |
-| Publishing | `connect_website`, `website_connection_status`, `disconnect_website` | Owner connects their website (WordPress) on a secure page with explicit consent |
+| Publishing | `get_fix_plan` | When the user asks to apply changes: detects the platform and explains how to connect, what can be fixed, what facts are needed first and what needs an expert |
+| | `connect_website`, `website_connection_status`, `disconnect_website` | Owner connects their website (WordPress) on a secure page with explicit consent |
 | | `fix_approval_status` | Shows what the owner approved, published, rejected or undid |
 
 ## Issue handling

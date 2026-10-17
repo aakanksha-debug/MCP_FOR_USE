@@ -192,7 +192,7 @@ export function registerDecisionTools(server: McpServer): void {
         return text(
           formatFixes(results) +
             (hasPublishable
-              ? "\n\nTo publish the minor fixes after the owner approves them, ask the user for permission to connect their website (connect_website; WordPress supported)."
+              ? "\n\nNext: if the user wants these applied, call get_fix_plan to see how to connect this site's platform. WordPress sites can be connected with connect_website so the owner approves each change before it is published."
               : ""),
         );
       }

@@ -2,6 +2,7 @@ import * as cheerio from "cheerio";
 import type { CheerioAPI } from "cheerio";
 import type { AnyNode, Element } from "domhandler";
 import type { FetchResult } from "./http";
+import { detectPlatform, type DetectedPlatform } from "./platform-detect";
 
 /**
  * Parses a fetched HTML page once into plain data that every audit reads.
@@ -65,6 +66,8 @@ export interface PageData {
   truncated: boolean;
   isHtml: boolean;
   error?: string;
+  /** Website platform detected from the HTML and headers. */
+  platform?: DetectedPlatform;
 
   lang?: string;
   titles: string[];
@@ -373,6 +376,7 @@ export function extractPage(result: FetchResult): PageData {
   const base = resolveUrl($("base[href]").attr("href"), result.url) ?? result.url;
   const page = emptyPage(result);
   page.isHtml = true;
+  page.platform = detectPlatform(result.body, result.headers);
 
   // Document order index for position-based heuristics.
   const order = new Map<Element, number>();

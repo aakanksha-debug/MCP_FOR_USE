@@ -1,13 +1,38 @@
 import type { McpServer } from "@modelcontextprotocol/server";
 import { z } from "zod";
 import { getApproval } from "@/approvals/records";
+import { loadTarget } from "@/audits/shared";
+import { createAuditContext } from "@/core/context";
+import { buildFixPlan, formatFixPlan } from "@/fixes/application-plan";
+import { classify } from "@/policy/classify";
+import { getIssueDefinition } from "@/policy/catalog";
 import { createSiteConnection, disconnectSite, siteConnectionStatus } from "@/platforms/connections";
 import { failure, guard, text } from "../respond";
-import { urlField } from "../schemas";
+import { issueRefField, urlField } from "../schemas";
 
 const siteConnectionIdField = z.string().min(10).max(200).describe("Website connection ID from connect_website (treat it like a password)");
 
 export function registerPublishTools(server: McpServer): void {
+  server.registerTool(
+    "get_fix_plan",
+    {
+      title: "Plan how to apply the fixes",
+      description:
+        "CALL THIS WHEN THE USER ASKS YOU TO MAKE, APPLY OR PUBLISH CHANGES to their website. Detects the site's platform (WordPress, Shopify, Wix, Webflow, Squarespace, Lovable, Next.js and others) and returns how to give access for that platform, which issues can be fixed once connected, what facts are needed from the user first, and which need an expert. Pass the issues from the audit results.",
+      inputSchema: z.object({
+        url: urlField,
+        issues: z.array(issueRefField).max(60).optional().describe("Issues from audit results (code and url)"),
+      }),
+      annotations: { readOnlyHint: true, openWorldHint: true },
+    },
+    guard(async ({ url, issues }) => {
+      const { page } = await loadTarget(createAuditContext({ budgetMs: 20_000 }), url);
+      const known = (issues ?? []).filter((issue) => getIssueDefinition(issue.code));
+      const plan = buildFixPlan(new URL(page.url).hostname, page.platform ?? { id: "unknown", name: "Unknown", kind: "unknown" }, classify(known));
+      return text(formatFixPlan(plan));
+    }),
+  );
+
   server.registerTool(
     "connect_website",
     {
