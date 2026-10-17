@@ -48,18 +48,41 @@ function primaryBrand(page: PageData): string | undefined {
   return brandCandidates(page)[0];
 }
 
+/** Turns SHOUTED headings into title case so they read well in search results. */
+export function readableCase(text: string): string {
+  const letters = text.replace(/[^a-z]/gi, "");
+  const upper = text.replace(/[^A-Z]/g, "").length;
+  if (letters.length < 5 || upper / letters.length < 0.8) return text;
+  const small = new Set(["a", "an", "and", "at", "for", "in", "of", "on", "or", "the", "to", "with", "by"]);
+  return text
+    .toLowerCase()
+    .split(/\s+/)
+    .map((word, index) => (index > 0 && small.has(word) ? word : word.charAt(0).toUpperCase() + word.slice(1)))
+    .join(" ");
+}
+
 export function suggestTitle(page: PageData): string {
   const brand = primaryBrand(page);
-  const topic =
+  const withBrand = (topic: string) => (brand && !topic.toLowerCase().includes(brand.toLowerCase()) ? `${topic} | ${brand}` : topic);
+
+  // A title that is only too long usually has the right topic: keep its main part.
+  if (page.title && page.title.length > 60) {
+    const parts = page.title.split(/\s[|\-–—:·]\s/).map((part) => part.trim()).filter(Boolean);
+    const main = parts.find((part) => !brand || part.toLowerCase() !== brand.toLowerCase()) ?? parts[0] ?? page.title;
+    const candidate = withBrand(main);
+    return candidate.length <= 60 ? candidate : trimToLength(main, 60);
+  }
+
+  const topic = readableCase(
     page.h1s[0] ??
-    page.og["og:title"] ??
-    page.headings[0]?.text ??
-    (page.title ? page.title.split(/\s[|\-–—]\s/)[0] : undefined) ??
-    new URL(page.url).hostname;
+      page.og["og:title"] ??
+      page.headings[0]?.text ??
+      (page.title ? page.title.split(/\s[|\-–—]\s/)[0] : undefined) ??
+      new URL(page.url).hostname,
+  );
   const topicClean = brand ? topic.replace(new RegExp(`\\s*[|\\-–—:]\\s*${brand.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`, "i"), "") : topic;
-  const withBrand = brand && !topicClean.toLowerCase().includes(brand.toLowerCase()) ? `${topicClean} | ${brand}` : topicClean;
-  if (withBrand.length <= 60) return withBrand;
-  return trimToLength(topicClean, 60);
+  const candidate = withBrand(topicClean);
+  return candidate.length <= 60 ? candidate : trimToLength(topicClean, 60);
 }
 
 /** Builds a 120-155 character description from the page's own copy where possible. */

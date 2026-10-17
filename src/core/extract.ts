@@ -368,6 +368,8 @@ export function extractPage(result: FetchResult): PageData {
   if (!result.body || !looksHtml) return emptyPage(result);
 
   const $ = cheerio.load(result.body);
+  // Line breaks separate words visually; keep that space in extracted text.
+  $("br").replaceWith(" ");
   const base = resolveUrl($("base[href]").attr("href"), result.url) ?? result.url;
   const page = emptyPage(result);
   page.isHtml = true;

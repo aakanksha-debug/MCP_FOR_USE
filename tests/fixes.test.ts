@@ -114,3 +114,25 @@ describe("suggestMetaDescription", () => {
     expect(description.startsWith("Demo Roofing")).toBe(true);
   });
 });
+
+describe("suggestTitle", () => {
+  async function page(html: string) {
+    const { extractPage } = await import("@/core/extract");
+    return extractPage({ requestedUrl: "https://x.test/", url: "https://x.test/", status: 200, ok: true, headers: { "content-type": "text/html" }, redirects: [], body: html, bytes: 1, truncated: false, timingMs: 1 });
+  }
+
+  it("shortens an over-long title to its main part plus brand", async () => {
+    const { suggestTitle } = await import("@/fixes/generators");
+    const data = await page(
+      '<html><head><title>Local & Ecommerce SEO Agency | Digital Marketing Services at Scale</title><meta property="og:site_name" content="Incrementors"></head><body><h1>BOOST YOUR SALES<br>IN THE NEXT 6 MONTHS</h1></body></html>',
+    );
+    expect(suggestTitle(data)).toBe("Local & Ecommerce SEO Agency | Incrementors");
+  });
+
+  it("builds a missing title from a shouted H1 in readable case, keeping line-break spaces", async () => {
+    const { suggestTitle } = await import("@/fixes/generators");
+    const data = await page('<html><head><meta property="og:site_name" content="Acme"></head><body><h1>BOOST YOUR SALES<br>IN THE NEXT 6 MONTHS</h1></body></html>');
+    expect(data.h1s[0]).toBe("BOOST YOUR SALES IN THE NEXT 6 MONTHS");
+    expect(suggestTitle(data)).toBe("Boost Your Sales in the Next 6 Months | Acme");
+  });
+});
