@@ -75,3 +75,61 @@ export async function pageReport(accessToken: string, propertyId: string, option
     };
   });
 }
+
+export interface Ga4Row {
+  dims: string[];
+  metrics: number[];
+}
+
+export interface Ga4ReportRequest {
+  startDate: string;
+  endDate: string;
+  dimensions?: string[];
+  metrics: string[];
+  limit?: number;
+  orderByMetric?: string;
+}
+
+/** Generic GA4 Data API report. */
+export async function runReport(accessToken: string, propertyId: string, request: Ga4ReportRequest): Promise<Ga4Row[]> {
+  const data = await googleFetch<{ rows?: { dimensionValues?: { value: string }[]; metricValues: { value: string }[] }[] }>(
+    `${DATA}/properties/${encodeURIComponent(propertyId)}:runReport`,
+    accessToken,
+    {
+      body: {
+        dateRanges: [{ startDate: request.startDate, endDate: request.endDate }],
+        ...(request.dimensions?.length ? { dimensions: request.dimensions.map((name) => ({ name })) } : {}),
+        metrics: request.metrics.map((name) => ({ name })),
+        ...(request.orderByMetric ? { orderBys: [{ metric: { metricName: request.orderByMetric }, desc: true }] } : {}),
+        limit: Math.min(request.limit ?? 100, 10_000),
+      },
+    },
+  );
+  return (data.rows ?? []).map((row) => ({
+    dims: (row.dimensionValues ?? []).map((value) => value.value),
+    metrics: row.metricValues.map((value) => Number(value.value)),
+  }));
+}
+
+/** Finds the GA4 property whose web data stream points at this site. */
+export async function findPropertyForSite(accessToken: string, siteUrl: string): Promise<Ga4Property | undefined> {
+  const host = new URL(siteUrl).hostname.replace(/^www\./, "");
+  const properties = (await listProperties(accessToken)).slice(0, 25);
+  for (const property of properties) {
+    const data = await googleFetch<{ dataStreams?: { webStreamData?: { defaultUri?: string } }[] }>(
+      `${ADMIN}/properties/${property.propertyId}/dataStreams?pageSize=50`,
+      accessToken,
+    ).catch(() => ({ dataStreams: [] }));
+    const match = (data.dataStreams ?? []).some((stream) => {
+      const uri = stream.webStreamData?.defaultUri;
+      if (!uri) return false;
+      try {
+        return new URL(/^https?:/i.test(uri) ? uri : `https://${uri}`).hostname.replace(/^www\./, "") === host;
+      } catch {
+        return false;
+      }
+    });
+    if (match) return property;
+  }
+  return undefined;
+}

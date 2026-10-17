@@ -20,24 +20,34 @@ export function registerGoogleTools(server: McpServer): void {
   server.registerTool(
     "google_connect",
     {
-      title: "Connect Google Search Console and GA4",
+      title: "Connect Google Search Console or Analytics",
       description:
-        "Starts an optional, read-only Google sign-in so audits can be verified against Search Console and GA4 data. Returns a sign-in link for the user and a connectionId to pass to other tools after they finish. Only offer this when the user wants deeper, data-backed analysis.",
-      inputSchema: z.object({}),
+        "Starts a read-only Google sign-in, one service at a time. Funnel order: first services ['search_console'] (after the website audit and safe fixes), later ['analytics'] with the same connectionId to add GA4 after the search analysis. Returns a sign-in link for the user and the connectionId to pass to the analysis tools.",
+      inputSchema: z.object({
+        services: z
+          .array(z.enum(["search_console", "analytics"]))
+          .min(1)
+          .max(2)
+          .optional()
+          .describe("Which Google data to connect (default: search_console)"),
+        connectionId: connectionIdField.optional().describe("Existing connectionId, to add a service to the same connection"),
+      }),
       annotations: { readOnlyHint: false, openWorldHint: true },
     },
-    guard(async () => {
-      const connection = await createConnection();
+    guard(async ({ services, connectionId }) => {
+      const wanted = services ?? ["search_console"];
+      const connection = await createConnection(wanted, connectionId);
+      const label = wanted.map((service) => (service === "search_console" ? "Search Console" : "Google Analytics")).join(" and ");
       return text(
         [
-          "## Connect Google (read-only)",
-          `1. Ask the user to open this link and sign in with the Google account that has access to their Search Console and/or GA4: ${connection.signInUrl}`,
+          `## Connect ${label} (read-only)`,
+          `1. Ask the user to open this link and sign in with the Google account that has access to their ${label}: ${connection.signInUrl}`,
           `2. The link works once and expires in ${connection.expiresInMinutes} minutes.`,
-          "3. When the user says they are done, call google_connection_status to confirm, then use the connectionId below.",
+          "3. When the user says they are done, call google_connection_status to confirm.",
           "",
-          `connectionId: \`${connection.connectionId}\``,
+          connection.adding ? "This adds access to the existing connection; keep using the same connectionId." : `connectionId: \`${connection.connectionId}\``,
           "",
-          "Access is read-only (Search Console and Analytics data). The user can disconnect any time with google_disconnect, or revoke access at https://myaccount.google.com/permissions.",
+          "Access is read-only. The user can disconnect any time with google_disconnect, or revoke access at https://myaccount.google.com/permissions.",
         ].join("\n"),
       );
     }),
@@ -55,8 +65,13 @@ export function registerGoogleTools(server: McpServer): void {
       const status = await connectionStatus(connectionId);
       if (status.status === "not_found") return text("No connection found for this ID (it may have expired). Run google_connect again.");
       if (status.status === "pending") return text("Sign-in has not been completed yet. Ask the user to finish signing in with the link.");
+      const next = status.searchConsole
+        ? status.analytics
+          ? "Next: data_driven_audit (or traffic_analysis) with this connectionId."
+          : "Next: search_performance_analysis with this connectionId. Offer Google Analytics after that."
+        : "Next: google_connect with services [\"search_console\"] and this connectionId.";
       return text(
-        `Connected as ${status.email ?? "a Google account"} since ${status.connectedAt}. Search Console: ${status.searchConsole ? "yes" : "no"}. GA4: ${status.analytics ? "yes" : "no"}.`,
+        `Connected as ${status.email ?? "a Google account"} since ${status.connectedAt}. Search Console: ${status.searchConsole ? "yes" : "no"}. Google Analytics: ${status.analytics ? "yes" : "no"}.\n${next}`,
       );
     }),
   );
@@ -84,7 +99,7 @@ export function registerGoogleTools(server: McpServer): void {
       annotations: READ_ONLY,
     },
     guard(async ({ connectionId }) => {
-      const sites = await listSites(await getAccessToken(connectionId));
+      const sites = await listSites(await getAccessToken(connectionId, "search_console"));
       return text(table(["Property", "Permission"], sites.map((site) => [site.siteUrl, site.permissionLevel])));
     }),
   );
@@ -109,7 +124,7 @@ export function registerGoogleTools(server: McpServer): void {
       annotations: READ_ONLY,
     },
     guard(async ({ connectionId, siteUrl, gscProperty, days, dimensions, pageContains, queryContains, questionsOnly, rowLimit }) => {
-      const accessToken = await getAccessToken(connectionId);
+      const accessToken = await getAccessToken(connectionId, "search_console");
       const property = await resolveGscProperty(accessToken, siteUrl, gscProperty);
       const range = recentRange(days ?? 28);
       const dims = dimensions ?? ["query"];
@@ -146,7 +161,7 @@ export function registerGoogleTools(server: McpServer): void {
       annotations: READ_ONLY,
     },
     guard(async ({ connectionId, url, gscProperty }) => {
-      const accessToken = await getAccessToken(connectionId);
+      const accessToken = await getAccessToken(connectionId, "search_console");
       const property = await resolveGscProperty(accessToken, url, gscProperty);
       const result = await inspectUrl(accessToken, property, url);
       const lines = Object.entries(result)
@@ -166,7 +181,7 @@ export function registerGoogleTools(server: McpServer): void {
       annotations: READ_ONLY,
     },
     guard(async ({ connectionId }) => {
-      const properties = await listProperties(await getAccessToken(connectionId));
+      const properties = await listProperties(await getAccessToken(connectionId, "analytics"));
       return text(table(["Property ID", "Name", "Account"], properties.map((p) => [p.propertyId, p.name, p.account])));
     }),
   );
@@ -189,7 +204,7 @@ export function registerGoogleTools(server: McpServer): void {
     },
     guard(async ({ connectionId, propertyId, days, pathContains, organicOnly, limit }) => {
       const range = recentRange(days ?? 28, 1);
-      const rows = await pageReport(await getAccessToken(connectionId), propertyId, {
+      const rows = await pageReport(await getAccessToken(connectionId, "analytics"), propertyId, {
         ...range,
         ...(pathContains ? { pathContains } : {}),
         organicOnly: organicOnly ?? false,

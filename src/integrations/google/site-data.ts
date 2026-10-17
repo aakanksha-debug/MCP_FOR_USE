@@ -35,7 +35,7 @@ export async function loadSearchRows(
   siteUrl: string,
   options: { property?: string; days?: number } = {},
 ): Promise<{ property: string; rows: SearchRow[]; period: string }> {
-  const accessToken = await getAccessToken(connectionId);
+  const accessToken = await getAccessToken(connectionId, "search_console");
   const property = await resolveGscProperty(accessToken, siteUrl, options.property);
   const range = recentRange(options.days ?? 90);
   const rows = (await queryPageRows(accessToken, property, range)).filter((row) => sameHost(row.page, siteUrl));

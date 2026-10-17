@@ -2,7 +2,16 @@ import { googleOAuthConfig, publicBaseUrl, tokenEncryptionKey, type GoogleOAuthC
 import { decrypt, encrypt, hashKey, pkceChallenge, randomToken } from "../storage/crypto";
 import { getStore, type KeyValueStore } from "../storage/kv";
 import { GoogleIntegrationError } from "./errors";
-import { buildAuthorizationUrl, exchangeCode, refreshTokens, revokeToken, type GoogleTokens } from "./oauth";
+import {
+  buildAuthorizationUrl,
+  exchangeCode,
+  grantedServices,
+  refreshTokens,
+  revokeToken,
+  scopesFor,
+  type GoogleService,
+  type GoogleTokens,
+} from "./oauth";
 
 /**
  * Connection lifecycle for the optional Google sign-in.
@@ -37,6 +46,7 @@ type StoredConnection = PendingConnection | ActiveConnection;
 
 interface StartRecord {
   connectionKey: string;
+  scopes: string[];
 }
 
 interface StateRecord {
@@ -86,17 +96,45 @@ function assertConnectionIdShape(connectionId: string): void {
   }
 }
 
-export async function createConnection(): Promise<{ connectionId: string; signInUrl: string; expiresInMinutes: number }> {
+/**
+ * Starts a Google sign-in for the given services. Passing an existing
+ * connectionId adds services to that connection (incremental consent), so the
+ * user connects Search Console first and Analytics later with the same ID.
+ */
+export async function createConnection(
+  services: GoogleService[] = ["search_console"],
+  existingConnectionId?: string,
+): Promise<{ connectionId: string; signInUrl: string; expiresInMinutes: number; adding: boolean }> {
   const { store } = dependencies();
-  const connectionId = `${CONNECTION_ID_PREFIX}${randomToken(32)}`;
-  const connectionKey = connectionStorageKey(connectionId);
+  let connectionId: string;
+  let connectionKey: string;
+  let adding = false;
+  let alreadyGranted: GoogleService[] = [];
+
+  if (existingConnectionId) {
+    assertConnectionIdShape(existingConnectionId);
+    const stored = await store.get<StoredConnection>(connectionStorageKey(existingConnectionId));
+    if (!stored || stored.status !== "connected") {
+      throw new GoogleIntegrationError("That Google connection was not found or is not finished. Start a new one with google_connect.", "not_connected");
+    }
+    connectionId = existingConnectionId;
+    connectionKey = connectionStorageKey(existingConnectionId);
+    alreadyGranted = grantedServices(stored.scope);
+    adding = true;
+  } else {
+    connectionId = `${CONNECTION_ID_PREFIX}${randomToken(32)}`;
+    connectionKey = connectionStorageKey(connectionId);
+    await store.set<StoredConnection>(connectionKey, { status: "pending", createdAt: Date.now() }, PENDING_TTL);
+  }
+
   const startToken = randomToken(24);
-  await store.set<StoredConnection>(connectionKey, { status: "pending", createdAt: Date.now() }, PENDING_TTL);
-  await store.set<StartRecord>(`gstart:${startToken}`, { connectionKey }, PENDING_TTL);
+  const wanted = [...new Set([...alreadyGranted, ...services])];
+  await store.set<StartRecord>(`gstart:${startToken}`, { connectionKey, scopes: scopesFor(wanted) }, PENDING_TTL);
   return {
     connectionId,
     signInUrl: `${publicBaseUrl()}/api/google/connect?start=${encodeURIComponent(startToken)}`,
     expiresInMinutes: PENDING_TTL / 60,
+    adding,
   };
 }
 
@@ -108,7 +146,7 @@ export async function beginAuthorization(startToken: string): Promise<string> {
   const state = randomToken(24);
   const verifier = randomToken(48);
   await store.set<StateRecord>(`gstate:${state}`, { connectionKey: start.connectionKey, verifier }, STATE_TTL);
-  return buildAuthorizationUrl(config, state, pkceChallenge(verifier));
+  return buildAuthorizationUrl(config, state, pkceChallenge(verifier), start.scopes ?? scopesFor(["search_console", "analytics"]));
 }
 
 export async function completeAuthorization(state: string, code: string): Promise<{ email?: string }> {
@@ -118,20 +156,24 @@ export async function completeAuthorization(state: string, code: string): Promis
   const pending = await store.get<StoredConnection>(record.connectionKey);
   if (!pending) throw new GoogleIntegrationError("This connection request has expired. Ask Claude for a new link.", "expired");
 
-  const tokens = await exchangeCode(config, code, record.verifier);
+  const exchanged = await exchangeCode(config, code, record.verifier);
+  // When adding a service, Google may not send a new refresh token; keep the existing one.
+  const previous = pending.status === "connected" ? (JSON.parse(decrypt(pending.tokens, key)) as GoogleTokens) : undefined;
+  const tokens: GoogleTokens = exchanged.refreshToken || !previous?.refreshToken ? exchanged : { ...exchanged, refreshToken: previous.refreshToken };
   if (!tokens.refreshToken) {
     throw new GoogleIntegrationError("Google did not return long-lived access. Please try connecting again.", "api_error");
   }
+  const email = tokens.email ?? (pending.status === "connected" ? pending.email : undefined);
   const connection: ActiveConnection = {
     status: "connected",
     createdAt: pending.createdAt,
     connectedAt: Date.now(),
-    ...(tokens.email ? { email: tokens.email } : {}),
+    ...(email ? { email } : {}),
     scope: tokens.scope,
     tokens: encrypt(JSON.stringify(tokens), key),
   };
   await store.set<StoredConnection>(record.connectionKey, connection, CONNECTION_TTL);
-  return tokens.email ? { email: tokens.email } : {};
+  return email ? { email } : {};
 }
 
 export interface ConnectionStatus {
@@ -157,8 +199,13 @@ export async function connectionStatus(connectionId: string): Promise<Connection
   };
 }
 
-/** Returns a valid access token, refreshing and re-saving it when needed. */
-export async function getAccessToken(connectionId: string): Promise<string> {
+const SERVICE_LABEL: Record<GoogleService, string> = { search_console: "Search Console", analytics: "Google Analytics" };
+
+/**
+ * Returns a valid access token, refreshing and re-saving it when needed. With
+ * `requires`, fails with a clear next step if that service was not granted.
+ */
+export async function getAccessToken(connectionId: string, requires?: GoogleService): Promise<string> {
   assertConnectionIdShape(connectionId);
   const { store, config, key } = dependencies();
   const storageKey = connectionStorageKey(connectionId);
@@ -166,6 +213,12 @@ export async function getAccessToken(connectionId: string): Promise<string> {
   if (!stored) throw new GoogleIntegrationError("No Google connection found for this ID. Run google_connect first.", "not_connected");
   if (stored.status === "pending") {
     throw new GoogleIntegrationError("Google sign-in has not been completed yet. Open the sign-in link first.", "not_connected");
+  }
+  if (requires && !grantedServices(stored.scope).includes(requires)) {
+    throw new GoogleIntegrationError(
+      `${SERVICE_LABEL[requires]} isn't connected yet. Call google_connect with services ["${requires}"] and this connectionId to add it (one more read-only Google consent).`,
+      "not_connected",
+    );
   }
   let tokens = JSON.parse(decrypt(stored.tokens, key)) as GoogleTokens;
   if (tokens.expiresAt - Date.now() < 60_000) {

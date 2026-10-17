@@ -18,7 +18,7 @@ import { normalizeTargetUrl } from "@/core/url-guard";
 import { expertRecommendation } from "@/decision/recommend";
 import { pathKey } from "@/decision/verify";
 import { loadSearchRows } from "@/integrations/google/site-data";
-import { formatAuditResult, formatFullAudit } from "../format";
+import { formatAuditResult, formatAuditSummary, formatFullAudit } from "../format";
 import { guard, text } from "../respond";
 import { auditIdField, gbpProfileField, gscPropertyField, optionalConnectionIdField, urlField } from "../schemas";
 
@@ -206,7 +206,7 @@ export function registerAuditTools(server: McpServer): void {
     {
       title: "Full Website Audit",
       description:
-        "Runs several checks at once (default: all eight) and returns one prioritized list of issues grouped by risk tier. Use for a broad overview; use the individual checks to go deeper. After it, call verify_issues_with_data if Google is connected.",
+        "STAGE 1 of the funnel: the free website audit. Runs the checks (SEO, AEO, GEO, technical, schema, conversion, content, and Google Business Profile when the business is local) and returns the overall score, category scores and only the top findings, plus the next step. Use detail='full' only when the user asks to see every finding.",
       inputSchema: z.object({
         url: urlField,
         checks: z.array(auditIdField).max(8).optional().describe("Subset of checks to run; omit to run all"),
@@ -215,10 +215,11 @@ export function registerAuditTools(server: McpServer): void {
         gbpProfile: gbpProfileField.optional(),
         googleConnectionId: optionalConnectionIdField,
         gscProperty: gscPropertyField,
+        detail: z.enum(["summary", "full"]).optional().describe("summary (default): scores and top findings; full: every finding"),
       }),
       annotations: READ_ONLY,
     },
-    guard(async ({ url, checks, questions, priorityTopics, gbpProfile, googleConnectionId, gscProperty }) => {
+    guard(async ({ url, checks, questions, priorityTopics, gbpProfile, googleConnectionId, gscProperty, detail }) => {
       const target = normalizeTargetUrl(url).toString();
       const search = await optionalSearchRows(googleConnectionId, target, gscProperty);
       const full = await runFullAudit(createAuditContext({ budgetMs: 50_000 }), {
@@ -230,7 +231,8 @@ export function registerAuditTools(server: McpServer): void {
         ...(search.rows ? { searchRows: search.rows } : {}),
       });
       if (search.note) full.results[0]?.notes.push(search.note);
-      return text(formatFullAudit(full, expertRecommendation(full.issues), offerGoogle(googleConnectionId)));
+      if (detail === "full") return text(formatFullAudit(full, expertRecommendation(full.issues), offerGoogle(googleConnectionId)));
+      return text(formatAuditSummary(full, Boolean(googleConnectionId)));
     }),
   );
 }

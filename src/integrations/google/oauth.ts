@@ -1,13 +1,23 @@
 import type { GoogleOAuthConfig } from "@/config/env";
 import { GoogleIntegrationError } from "./errors";
 
-/** Read-only scopes. The MCP never requests permission to change Google data. */
-export const GOOGLE_SCOPES = [
-  "openid",
-  "email",
-  "https://www.googleapis.com/auth/webmasters.readonly",
-  "https://www.googleapis.com/auth/analytics.readonly",
-] as const;
+/** Read-only scopes, requested progressively. The MCP never asks to change Google data. */
+export type GoogleService = "search_console" | "analytics";
+
+export const SERVICE_SCOPES: Record<GoogleService, string> = {
+  search_console: "https://www.googleapis.com/auth/webmasters.readonly",
+  analytics: "https://www.googleapis.com/auth/analytics.readonly",
+};
+
+export const BASE_SCOPES = ["openid", "email"] as const;
+
+export function scopesFor(services: GoogleService[]): string[] {
+  return [...BASE_SCOPES, ...services.map((service) => SERVICE_SCOPES[service])];
+}
+
+export function grantedServices(scope: string): GoogleService[] {
+  return (Object.keys(SERVICE_SCOPES) as GoogleService[]).filter((service) => scope.includes(SERVICE_SCOPES[service]));
+}
 
 const AUTH_ENDPOINT = "https://accounts.google.com/o/oauth2/v2/auth";
 const TOKEN_ENDPOINT = "https://oauth2.googleapis.com/token";
@@ -22,12 +32,12 @@ export interface GoogleTokens {
   email?: string;
 }
 
-export function buildAuthorizationUrl(config: GoogleOAuthConfig, state: string, codeChallenge: string): string {
+export function buildAuthorizationUrl(config: GoogleOAuthConfig, state: string, codeChallenge: string, scopes: string[]): string {
   const url = new URL(AUTH_ENDPOINT);
   url.searchParams.set("client_id", config.clientId);
   url.searchParams.set("redirect_uri", config.redirectUri);
   url.searchParams.set("response_type", "code");
-  url.searchParams.set("scope", GOOGLE_SCOPES.join(" "));
+  url.searchParams.set("scope", scopes.join(" "));
   url.searchParams.set("access_type", "offline");
   url.searchParams.set("prompt", "consent");
   url.searchParams.set("include_granted_scopes", "true");

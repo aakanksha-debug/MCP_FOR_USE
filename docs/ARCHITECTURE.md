@@ -21,6 +21,8 @@ src/mcp/                     MCP layer: tool registration, schemas, formatting, 
 src/audits/                  One module per audit; each returns findings, never tiers
 src/policy/                  Issue catalog (tier, impact, wording, fixability), classification, scoring
 src/decision/                Verification against GSC/GA4 data and the Incrementors recommendation rules
+src/analysis/                Search Console and GA4 analyses and the combined data-driven audit (pure functions + loaders)
+src/funnel/                  The progressive journey: one "Continue → …" next step per stage, expert conversion block
 src/fixes/                   Fix generators (minor, content-only), drafts (approved medium), policy enforcement
 src/platforms/               Publishing adapters (WordPress), reversible content ops, website connections
 src/approvals/               Approval records, staging, publish and undo (owner-triggered only)
@@ -36,6 +38,10 @@ src/config/                  Environment access and Incrementors brand/service l
 3. Audit modules read pages through the context. `safeFetch` blocks private addresses, caps size and time, and records redirects. `extractPage` parses HTML once into plain data (`PageData`).
 4. Audits emit `Finding`s (code, URL, detail). `src/policy/classify.ts` attaches tier, impact, wording and fix policy from the catalog, deduplicates and scores.
 5. `src/decision/recommend.ts` decides whether an expert-help line is appropriate. `src/mcp/format.ts` renders Markdown.
+
+## The funnel
+
+Each tool returns value for its stage and ends with exactly one next step from `src/funnel/stages.ts`: audit → safe fixes → Search Console → GA4 → data-driven audit → critical issues → expert. Google consent is incremental (`google_connect` with `services`), so users grant Search Console first and add Analytics later on the same connection. The expert recommendation is generated from the findings and only appears when 🔴 work exists.
 
 ## Separation of concerns
 

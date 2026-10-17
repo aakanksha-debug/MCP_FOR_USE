@@ -4,6 +4,20 @@ A free MCP server (Claude connector) from [Incrementors](https://www.incrementor
 
 **Core flow:** Audit → Verify with data → Identify issue → Recommend → Safely fix where possible → Recommend Incrementors expertise when needed.
 
+## The journey
+
+The MCP never asks for every integration up front. Each step gives useful results, then offers the next deeper one:
+
+1. **Free website audit** (`run_full_audit`): overall score, category scores (SEO, AEO, GEO, Technical, Conversion, Schema, Content, plus GBP for local businesses) and only the top findings: "We found 14 opportunities, including 5 low-risk issues…".
+2. **Safe fixes**: "I found 5 issues that can be safely fixed. Would you like me to fix them?" Fixes are prepared only after a yes, published only after the site owner approves them, and followed by a before/after summary.
+3. **Connect Google Search Console** → `search_performance_analysis`: clicks, impressions, CTR, position and their trends, top queries and pages, visibility opportunities.
+4. **Connect Google Analytics** (added to the same Google connection) → `traffic_analysis`: traffic, sources, landing pages, engagement, conversions.
+5. **Deep data-driven audit** (`data_driven_audit`): website + Search Console + GA4 combined, ranked by business impact (pages seen but not clicked, traffic without conversions, underperforming service pages, searches without a landing page, real customer questions…).
+6. **Critical issues**: 🟢 MCP can safely handle · 🟡 requires approval · 🔴 strategic/expert work, with why each 🔴 item needs careful planning.
+7. **Incrementors expert** (`connect_with_expert`): recommended only when the audit found expert-level work, with a ready-to-send brief for the strategist.
+
+Every result ends with one clear "Continue → …" step. Trust comes first: problems are never invented or hidden to force the next step.
+
 ## Tools
 
 | Group | Tool | What it does |
@@ -16,14 +30,17 @@ A free MCP server (Claude connector) from [Incrementors](https://www.incrementor
 | | `technical_website_check` | Status, HTTPS, redirects, www duplication, robots.txt, sitemap, canonicals, viewport, lang, mixed content, speed, compression, HSTS, hreflang, optional Core Web Vitals |
 | | `schema_check` | Invalid JSON-LD, missing @context, required/recommended properties per type, missing Organization/WebSite/Breadcrumb/Article/Product/FAQ markup |
 | | `content_opportunity_check` | Missing key pages, thin service pages, stale blog, priority topics without pages; with GSC: striking-distance, low CTR, question queries, cannibalization |
-| | `run_full_audit` | Runs any or all checks in parallel and returns one prioritized list |
-| Google (optional) | `google_connect`, `google_connection_status`, `google_disconnect` | Read-only Google sign-in for Search Console and GA4 |
+| | `run_full_audit` | Stage 1: overall and category scores plus the top findings (`detail: "full"` for every finding) |
+| Data analysis | `search_performance_analysis` | Search Console: totals and trends, top queries and pages, opportunities |
+| | `traffic_analysis` | GA4: traffic, sources, landing pages, engagement and conversions (property found automatically) |
+| | `data_driven_audit` | Website + Search Console + GA4 ranked by business impact, critical issues by tier, expert recommendation when warranted |
+| Google (optional) | `google_connect`, `google_connection_status`, `google_disconnect` | Read-only Google sign-in, one service at a time (Search Console first, then GA4 on the same connection) |
 | | `gsc_list_properties`, `gsc_search_performance`, `gsc_inspect_url` | Search Console data and URL inspection |
 | | `ga4_list_properties`, `ga4_page_performance` | GA4 sessions, engagement and key events per page |
 | Decisions | `verify_issues_with_data` | Marks each issue as confirmed, likely, no visible impact or not enough data, sorted by priority |
 | | `prepare_fixes` | Exact fixes for minor issues (staged for owner approval when a website is connected), drafts for approved medium issues, expert warnings for everything else |
 | | `list_issue_types` | Every issue code with its risk tier |
-| | `get_expert_help` | Incrementors service details, only when the user asks |
+| | `connect_with_expert` | Final stage: free strategy-session link plus a ready-to-send audit brief, only after the user has their results |
 | Publishing | `get_fix_plan` | When the user asks to apply changes: detects the platform and explains how to connect, what can be fixed, what facts are needed first and what needs an expert |
 | | `connect_website`, `website_connection_status`, `disconnect_website` | Owner connects their website (WordPress) on a secure page with explicit consent |
 | | `fix_approval_status` | Shows what the owner approved, published, rejected or undid |

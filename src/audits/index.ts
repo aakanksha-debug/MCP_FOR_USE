@@ -44,6 +44,15 @@ export interface FullAuditResult {
   results: AuditResult[];
   issues: Issue[];
   errors: { audit: AuditId; message: string }[];
+  /** Checks that ran but were left out of scores because they don't apply to this site. */
+  skipped: { audit: AuditId; reason: string }[];
+}
+
+/** GBP checks only matter for businesses customers find on Google Maps. */
+function gbpRelevant(result: AuditResult, input: FullAuditInput): boolean {
+  if (input.gbpProfile || input.checks?.includes("gbp")) return true;
+  const facts = result.facts as { addressOnSite?: boolean; localBusinessSchema?: boolean; profileLinks?: unknown[]; mapEmbedded?: boolean };
+  return Boolean(facts.addressOnSite || facts.localBusinessSchema || facts.mapEmbedded || (facts.profileLinks?.length ?? 0) > 0);
 }
 
 /** Runs the selected audits in parallel over one shared, memoized context. */
@@ -69,10 +78,19 @@ export async function runFullAudit(ctx: AuditContext, input: FullAuditInput): Pr
   const settled = await Promise.allSettled(checks.map((id) => runners[id]()));
   const results: AuditResult[] = [];
   const errors: FullAuditResult["errors"] = [];
+  const skipped: FullAuditResult["skipped"] = [];
   settled.forEach((outcome, index) => {
     const audit = checks[index]!;
-    if (outcome.status === "fulfilled") results.push(outcome.value);
-    else errors.push({ audit, message: outcome.reason instanceof Error ? outcome.reason.message : String(outcome.reason) });
+    if (outcome.status === "rejected") {
+      errors.push({ audit, message: outcome.reason instanceof Error ? outcome.reason.message : String(outcome.reason) });
+    } else if (audit === "gbp" && !gbpRelevant(outcome.value, input)) {
+      skipped.push({
+        audit,
+        reason: "No local-business signals (address, map, Google Business Profile link or LocalBusiness markup), so Google Business Profile checks were left out. Mention it if the business has a profile.",
+      });
+    } else {
+      results.push(outcome.value);
+    }
   });
 
   const merged = new Map<string, Issue>();
@@ -86,5 +104,6 @@ export async function runFullAudit(ctx: AuditContext, input: FullAuditInput): Pr
     results,
     issues: sortIssues([...merged.values()]),
     errors,
+    skipped,
   };
 }

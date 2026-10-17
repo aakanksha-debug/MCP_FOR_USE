@@ -50,12 +50,14 @@ export interface GscFilter {
 export interface GscQuery {
   startDate: string;
   endDate: string;
+  /** Empty for site totals. */
   dimensions: GscDimension[];
   rowLimit?: number;
   filters?: GscFilter[];
 }
 
 export interface GscRow {
+  /** Absent on totals rows (no dimensions). */
   keys: string[];
   clicks: number;
   impressions: number;
@@ -71,7 +73,7 @@ export async function searchAnalytics(accessToken: string, siteUrl: string, quer
       body: {
         startDate: query.startDate,
         endDate: query.endDate,
-        dimensions: query.dimensions,
+        ...(query.dimensions.length ? { dimensions: query.dimensions } : {}),
         rowLimit: Math.min(query.rowLimit ?? 1000, 25_000),
         type: "web",
         dataState: "final",
@@ -130,4 +132,16 @@ export async function inspectUrl(accessToken: string, siteUrl: string, inspectio
     ...(status.userCanonical ? { userCanonical: status.userCanonical } : {}),
     ...(richResults?.length ? { richResults } : {}),
   };
+}
+
+export interface SearchTotals {
+  clicks: number;
+  impressions: number;
+  ctr: number;
+  position: number;
+}
+
+export async function searchTotals(accessToken: string, siteUrl: string, range: { startDate: string; endDate: string }): Promise<SearchTotals> {
+  const [row] = await searchAnalytics(accessToken, siteUrl, { ...range, dimensions: [], rowLimit: 1 });
+  return { clicks: row?.clicks ?? 0, impressions: row?.impressions ?? 0, ctr: row?.ctr ?? 0, position: row?.position ?? 0 };
 }

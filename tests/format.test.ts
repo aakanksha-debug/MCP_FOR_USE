@@ -16,14 +16,14 @@ const result: AuditResult = {
 };
 
 describe("audit output", () => {
-  it("offers Google Search Console and Analytics after an audit", () => {
+  it("offers Google Search Console after an audit", () => {
     const text = formatAuditResult(result, null, true);
     expect(text).toContain(GOOGLE_OFFER);
-    expect(text).toContain('Say "connect Google" to start');
+    expect(text).toContain('Say "connect Search Console" to start');
   });
 
   it("does not offer it once Google is connected", () => {
-    expect(formatAuditResult(result, null, false)).not.toContain("connect Google");
+    expect(formatAuditResult(result, null, false)).not.toContain("Connect Google Search Console");
   });
 
   it("keeps the score line and first heading on separate lines", () => {

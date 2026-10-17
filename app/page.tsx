@@ -45,6 +45,15 @@ export default function Home() {
         ))}
       </div>
 
+      <h2>How it works</h2>
+      <ol>
+        <li>Give Claude your website URL and get a free audit: an overall score, category scores and the top issues.</li>
+        <li>Fix the low-risk issues with your permission; you approve every change before it goes live.</li>
+        <li>Optionally connect Google Search Console to see how Google actually treats your site.</li>
+        <li>Then connect Google Analytics to see what visitors do after they arrive.</li>
+        <li>Get a deep, data-driven audit that ranks issues by real business impact, and expert help only where it is needed.</li>
+      </ol>
+
       <h2>How changes are handled</h2>
       <ul>
         <li>🟢 Minor content fixes (titles, descriptions, alt text, links): prepared when you ask, and published only after you approve each change on a review page. Every change can be undone.</li>

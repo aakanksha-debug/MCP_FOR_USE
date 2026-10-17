@@ -1,12 +1,13 @@
 import type { FullAuditResult } from "@/audits";
-import type { AuditResult, Issue, Tier } from "@/core/types";
+import type { AuditId, AuditResult, Impact, Issue, Tier } from "@/core/types";
+import { expertConversion, nextAfterAudit } from "@/funnel/stages";
 import type { ExpertRecommendation } from "@/decision/recommend";
 import type { VerifiedIssue } from "@/decision/verify";
 import type { StageSummary } from "@/approvals/stage";
 import { publicBaseUrl } from "@/config/env";
 import type { FixResult } from "@/fixes/plan";
 import { countByTier } from "@/policy/classify";
-import { TIERS, TIER_ORDER } from "@/policy/tiers";
+import { IMPACT_WEIGHT, TIERS, TIER_ORDER } from "@/policy/tiers";
 
 /**
  * Markdown renderers for tool results. Every issue line carries its code and
@@ -47,9 +48,9 @@ function list(title: string, items: string[]): string {
   return items.length ? `\n\n**${title}**\n${items.map((item) => `- ${item}`).join("\n")}` : "";
 }
 
-/** Offered after audits when Google sign-in is available and not yet connected. */
+/** Offered after single-check results while Google is not connected. */
 export const GOOGLE_OFFER =
-  "**🔗 Get data-backed results (optional): connect Google Search Console and Google Analytics.** Read-only, takes about a minute. I can then check which of these issues actually cost you traffic, clicks and conversions, pull the real questions people search for, and prioritize the fixes by impact. Say \"connect Google\" to start.";
+  "**🔗 Want data-backed results? Continue → Connect Google Search Console** (optional, read-only, about a minute). I can then check which of these issues actually cost you visibility, clicks and traffic, and prioritize the fixes by impact. Say \"connect Search Console\" to start.";
 
 function googleOfferBlock(offer: boolean): string {
   return offer ? `\n\n${GOOGLE_OFFER}` : "";
@@ -94,6 +95,7 @@ export function formatFullAudit(full: FullAuditResult, recommendation: ExpertRec
     "",
     formatIssues(full.issues, { withWhy: false, limitPerTier: 15 }),
     full.errors.length ? list("Checks that could not run", full.errors.map((error) => `${error.audit}: ${error.message}`)) : "",
+    full.skipped.length ? list("Left out", full.skipped.map((item) => item.reason)) : "",
     list("Ask the user", askUser),
     list("Notes", notes),
     recommendationBlock(recommendation),
@@ -193,3 +195,125 @@ export function formatStaged(results: FixResult[], staged: StageSummary): string
   if (other.length) lines.push("", formatFixes(other));
   return lines.join("\n");
 }
+
+// ---------------------------------------------------------------- Stage 1 summary
+
+export const CATEGORY_LABEL: Record<AuditId, string> = {
+  seo: "SEO",
+  aeo: "AEO",
+  geo: "GEO",
+  technical: "Technical",
+  conversion: "Conversion",
+  schema: "Schema",
+  content: "Content",
+  gbp: "Local (GBP)",
+};
+
+const CATEGORY_ORDER: AuditId[] = ["seo", "aeo", "geo", "technical", "conversion", "schema", "content", "gbp"];
+
+/** All findings with the same issue code, counted once as one opportunity. */
+export interface IssueGroup {
+  code: string;
+  title: string;
+  tier: Tier;
+  impact: Impact;
+  category: AuditId;
+  why: string;
+  recommendation: string;
+  expertReason?: string;
+  urls: string[];
+  details: string[];
+}
+
+export function groupIssues(issues: Issue[]): IssueGroup[] {
+  const groups = new Map<string, IssueGroup>();
+  for (const issue of issues) {
+    const group = groups.get(issue.code) ?? {
+      code: issue.code,
+      title: issue.title,
+      tier: issue.tier,
+      impact: issue.impact,
+      category: issue.category,
+      why: issue.why,
+      recommendation: issue.recommendation,
+      ...(issue.expertReason ? { expertReason: issue.expertReason } : {}),
+      urls: [],
+      details: [],
+    };
+    if (!group.urls.includes(issue.url)) group.urls.push(issue.url);
+    if (issue.detail && group.details.length < 3) group.details.push(issue.detail);
+    groups.set(issue.code, group);
+  }
+  return [...groups.values()];
+}
+
+const TIER_BONUS: Record<Tier, number> = { high: 3, medium: 2, safe: 1 };
+
+/** Most important first: expected impact, then risk, then how widespread. */
+export function rankGroups(groups: IssueGroup[]): IssueGroup[] {
+  const score = (group: IssueGroup) => IMPACT_WEIGHT[group.impact] * 10 + TIER_BONUS[group.tier] + Math.min(group.urls.length, 5) * 0.5;
+  return [...groups].sort((a, b) => score(b) - score(a));
+}
+
+export function countGroups(groups: IssueGroup[]): Record<Tier, number> {
+  const counts = { safe: 0, medium: 0, high: 0 };
+  for (const group of groups) counts[group.tier] += 1;
+  return counts;
+}
+
+function actionFor(group: IssueGroup): string {
+  if (group.tier === "safe") return `🟢 Can be fixed safely with your permission: ${group.recommendation}`;
+  if (group.tier === "medium") return `🟡 Needs your review: ${group.recommendation}`;
+  return `🔴 Needs expert advice (${(group.expertReason ?? "high-risk change").toLowerCase()}): ${group.recommendation}`;
+}
+
+function findingBlock(group: IssueGroup, index: number): string {
+  const where = group.urls.length === 1 ? group.urls[0] : `${group.urls.length} pages, e.g. ${group.urls[0]}`;
+  return [
+    `${index}. ${TIERS[group.tier].emoji} **${group.title}** · ${CATEGORY_LABEL[group.category]} · ${where}`,
+    ...(group.details[0] ? [`   Evidence: ${group.details[0]}`] : []),
+    `   Why it matters: ${group.why}`,
+    `   ${actionFor(group)}`,
+  ].join("\n");
+}
+
+/** Stage 1: score, category scores, opportunity count, top findings, one next step. */
+export function formatAuditSummary(full: FullAuditResult, googleConnected: boolean, topCount = 5): string {
+  const host = (() => {
+    try {
+      return new URL(full.target).hostname;
+    } catch {
+      return full.target;
+    }
+  })();
+  const groups = rankGroups(groupIssues(full.issues));
+  const counts = countGroups(groups);
+  const scores = CATEGORY_ORDER.map((id) => full.results.find((result) => result.audit === id))
+    .filter((result): result is AuditResult => Boolean(result))
+    .map((result) => `- ${CATEGORY_LABEL[result.audit]}: ${result.score}`);
+  const top = groups.slice(0, topCount);
+  const allRefs = full.issues.map((issue) => `- ${TIERS[issue.tier].emoji} \`${issue.code}\` ${issue.url}${issue.detail ? ` (${issue.detail})` : ""}`);
+  const askUser = [...new Set(full.results.flatMap((result) => result.askUser))].slice(0, 3);
+
+  return [
+    `## Website audit: ${host}`,
+    `**Overall Website Score: ${full.overallScore}/100**`,
+    ...scores,
+    "",
+    groups.length
+      ? `We found **${groups.length} opportunit${groups.length === 1 ? "y" : "ies"}**, including **${counts.safe} low-risk issue${counts.safe === 1 ? "" : "s"}** that can be fixed with your permission.`
+      : "We found no significant issues.",
+    ...(top.length ? ["", `### Top ${top.length} findings`, ...top.map((group, index) => findingBlock(group, index + 1))] : []),
+    ...(groups.length
+      ? ["", `**At a glance:** 🟢 ${counts.safe} safe to fix · 🟡 ${counts.medium} need your review · 🔴 ${counts.high} need expert work`]
+      : []),
+    ...(full.skipped.length ? ["", ...full.skipped.map((item) => `_${item.reason}_`)] : []),
+    ...(full.errors.length ? ["", `_Some checks could not run: ${full.errors.map((error) => `${CATEGORY_LABEL[error.audit]} (${error.message})`).join("; ")}_`] : []),
+    ...(askUser.length ? ["", "**To make the next steps more accurate, it helps to know:**", ...askUser.map((item) => `- ${item}`)] : []),
+    ...(allRefs.length
+      ? ["", `<details><summary>All ${full.issues.length} findings (codes for follow-up tools; show only if the user asks)</summary>`, "", ...allRefs, "</details>"]
+      : []),
+  ].join("\n") + nextAfterAudit(counts, googleConnected);
+}
+
+export { expertConversion };

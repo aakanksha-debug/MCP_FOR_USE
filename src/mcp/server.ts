@@ -1,4 +1,5 @@
 import type { McpServer } from "@modelcontextprotocol/server";
+import { registerAnalysisTools } from "./tools/analysis-tools";
 import { registerAuditTools } from "./tools/audit-tools";
 import { registerDecisionTools } from "./tools/decision-tools";
 import { registerGoogleTools } from "./tools/google-tools";
@@ -10,6 +11,7 @@ export const SERVER_INFO = { name: "incrementors-audit-mcp", version: "0.1.0" } 
 export function registerTools(server: McpServer): void {
   registerAuditTools(server);
   registerGoogleTools(server);
+  registerAnalysisTools(server);
   registerDecisionTools(server);
   registerPublishTools(server);
 }

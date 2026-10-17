@@ -6,6 +6,8 @@ import { mapLimit } from "@/core/concurrency";
 import type { Finding } from "@/core/types";
 import { normalizeTargetUrl } from "@/core/url-guard";
 import { expertHelpDetails, expertRecommendation } from "@/decision/recommend";
+import { whyPlanning } from "@/analysis/deep-audit";
+import { nextAfterFixes } from "@/funnel/stages";
 import {
   INDEXATION_CODES,
   pathKey,
@@ -192,13 +194,14 @@ export function registerDecisionTools(server: McpServer): void {
         return text(
           formatFixes(results) +
             (hasPublishable
-              ? "\n\nNext: if the user wants these applied, call get_fix_plan to see how to connect this site's platform. WordPress sites can be connected with connect_website so the owner approves each change before it is published."
-              : ""),
+              ? "\n\nTo apply these: call get_fix_plan to see how to connect this site's platform. WordPress sites can be connected with connect_website so the owner approves each change before it is published."
+              : "") +
+            nextAfterFixes(false),
         );
       }
       const site = await loadSite(siteConnectionId);
       const staged = await stageFixes(results, site);
-      return text(formatStaged(results, staged));
+      return text(formatStaged(results, staged) + nextAfterFixes(false));
     }),
   );
 
@@ -224,29 +227,46 @@ export function registerDecisionTools(server: McpServer): void {
   );
 
   server.registerTool(
-    "get_expert_help",
+    "connect_with_expert",
     {
-      title: "Incrementors expert help",
+      title: "Connect with an Incrementors Expert",
       description:
-        "Returns how Incrementors could help with a specific area, plus links for a free strategy session. Use only when the user asks about professional help, or wants options after a high-risk issue was flagged.",
+        "FINAL FUNNEL STAGE. Use when the audit found strategic/expert work (🔴) and the user wants help, or asks about professional help. Returns the booking link for a free strategy session with an Incrementors SEO/AEO/GEO strategist and a short, ready-to-send brief of the user's audit so the strategist starts with context. Never use it before the user has received their audit results.",
       inputSchema: z.object({
-        area: z.enum(["seo", "technical-seo", "local-seo", "aeo", "geo", "content", "conversion", "web-development"] satisfies [ExpertiseArea, ...ExpertiseArea[]]),
-        issueCodes: z.array(z.string().max(100)).max(20).optional().describe("Issue codes the user wants help with"),
+        siteUrl: urlField.optional(),
+        area: z
+          .enum(["seo", "technical-seo", "local-seo", "aeo", "geo", "content", "conversion", "web-development"] satisfies [ExpertiseArea, ...ExpertiseArea[]])
+          .optional()
+          .describe("Main area of help, if clear"),
+        issueCodes: z.array(z.string().max(100)).max(20).optional().describe("Codes of the expert-level issues found"),
+        overallScore: z.number().min(0).max(100).optional(),
       }),
       annotations: { readOnlyHint: true, openWorldHint: false },
     },
-    guard(async ({ area, issueCodes }) => {
-      const details = expertHelpDetails(area);
-      const issues = (issueCodes ?? []).map((code) => getIssueDefinition(code)?.title).filter(Boolean);
+    guard(async ({ siteUrl, area, issueCodes, overallScore }) => {
+      const definitions = (issueCodes ?? []).map((code) => getIssueDefinition(code)).filter((d): d is NonNullable<typeof d> => Boolean(d));
+      const strategic = definitions.filter((d) => d.tier === "high");
+      const details = expertHelpDetails(area ?? strategic[0]?.expertise ?? "seo");
+      const brief = [
+        `Website: ${siteUrl ?? "(your website)"}`,
+        ...(overallScore !== undefined ? [`Audit score: ${overallScore}/100 (Incrementors Website Audit MCP)`] : []),
+        ...(strategic.length ? ["Issues that need expert planning:", ...strategic.map((d) => `- ${d.title}: ${whyPlanning(d.code, d.expertReason)}`)] : []),
+        ...(definitions.length > strategic.length ? [`Other open items: ${definitions.filter((d) => d.tier !== "high").map((d) => d.title).join("; ")}`] : []),
+      ];
       return text(
         [
-          `## ${details.service} help from Incrementors`,
-          `What they would do: ${details.whatTheyDo}${issues.length ? `, starting with: ${issues.join("; ")}` : ""}.`,
-          `- Service: ${details.serviceUrl}`,
-          `- Free 30-minute strategy session: ${details.freeStrategySession}`,
-          `- Contact: ${details.contact}`,
+          "## Connect with an Incrementors Expert",
+          `An Incrementors ${details.service} strategist can ${details.whatTheyDo}.`,
           "",
-          "Share these only as an option; the user can also apply the recommendations themselves.",
+          `**→ Book a free 30-minute strategy session:** ${details.freeStrategySession}`,
+          `Or get in touch: ${details.contact}`,
+          "",
+          "**Ready-to-send brief** (paste it into the booking form so the strategist starts with your audit):",
+          "```",
+          ...brief,
+          "```",
+          "",
+          "This is optional. Everything in the audit stays yours, and the safe fixes and recommendations work without it.",
         ].join("\n"),
       );
     }),

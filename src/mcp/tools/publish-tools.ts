@@ -1,6 +1,7 @@
 import type { McpServer } from "@modelcontextprotocol/server";
 import { z } from "zod";
 import { getApproval } from "@/approvals/records";
+import { nextAfterFixes } from "@/funnel/stages";
 import { loadTarget } from "@/audits/shared";
 import { createAuditContext } from "@/core/context";
 import { buildFixPlan, formatFixPlan } from "@/fixes/application-plan";
@@ -108,13 +109,17 @@ export function registerPublishTools(server: McpServer): void {
       const record = await getApproval(approvalId);
       if (!record) return failure("Approval not found or expired.");
       const counts = record.changes.reduce<Record<string, number>>((acc, change) => ({ ...acc, [change.status]: (acc[change.status] ?? 0) + 1 }), {});
+      const published = record.changes.filter((change) => change.status === "published");
+      const others = record.changes.filter((change) => change.status !== "published");
       return text(
         [
-          `## Approval for ${record.host}`,
-          `Pending ${counts.pending ?? 0} · Published ${counts.published ?? 0} · Rejected ${counts.skipped ?? 0} · Failed ${counts.failed ?? 0} · Undone ${counts.reverted ?? 0}`,
-          "",
-          ...record.changes.map((change) => `- ${change.label}: ${change.status}${change.error ? ` (${change.error})` : ""}`),
-        ].join("\n"),
+          `## Fixes for ${record.host}`,
+          `Published ${counts.published ?? 0} · Waiting ${counts.pending ?? 0} · Rejected ${counts.skipped ?? 0} · Failed ${counts.failed ?? 0} · Undone ${counts.reverted ?? 0}`,
+          ...(published.length
+            ? ["", "**Before → after (live now)**", ...published.map((change) => `- ${change.label}: "${change.before}" → "${change.after}"`)]
+            : []),
+          ...(others.length ? ["", "**Other changes**", ...others.map((change) => `- ${change.label}: ${change.status}${change.error ? ` (${change.error})` : ""}`)] : []),
+        ].join("\n") + (counts.pending ? "" : nextAfterFixes(false)),
       );
     }),
   );
