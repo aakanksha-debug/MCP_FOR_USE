@@ -32,14 +32,26 @@ export interface GoogleTokens {
   email?: string;
 }
 
-export function buildAuthorizationUrl(config: GoogleOAuthConfig, state: string, codeChallenge: string, scopes: string[]): string {
+/**
+ * `chooseAccount` makes Google show its account picker, so the user picks the
+ * Google account that holds the site's data (it need not be the one they use
+ * for Claude or are currently signed in with). Off when adding a service to an
+ * existing connection, which must stay on the same account.
+ */
+export function buildAuthorizationUrl(
+  config: GoogleOAuthConfig,
+  state: string,
+  codeChallenge: string,
+  scopes: string[],
+  options: { chooseAccount?: boolean } = {},
+): string {
   const url = new URL(AUTH_ENDPOINT);
   url.searchParams.set("client_id", config.clientId);
   url.searchParams.set("redirect_uri", config.redirectUri);
   url.searchParams.set("response_type", "code");
   url.searchParams.set("scope", scopes.join(" "));
   url.searchParams.set("access_type", "offline");
-  url.searchParams.set("prompt", "consent");
+  url.searchParams.set("prompt", options.chooseAccount === false ? "consent" : "select_account consent");
   url.searchParams.set("include_granted_scopes", "true");
   url.searchParams.set("state", state);
   url.searchParams.set("code_challenge", codeChallenge);

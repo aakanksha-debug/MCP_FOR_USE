@@ -43,6 +43,7 @@ export function authorizePage(options: {
   const google = options.googleAvailable
     ? `<button class="primary" type="submit" name="action" value="google">Sign in with Google</button>
        <ul>
+         <li>Use any Google account that can see your Search Console and Analytics. It does not have to be the account you use for Claude; Google lets you choose.</li>
          <li>Your Search Console and Google Analytics data is added to every audit automatically.</li>
          <li>Read-only: nothing in your Google account can be changed.</li>
          <li>Disconnect any time by asking Claude, or at myaccount.google.com/permissions.</li>
@@ -82,7 +83,7 @@ export function authorizePage(options: {
     <input type="hidden" name="request" value="${escape(options.requestId)}">
     ${google}
     <button class="secondary" type="submit" name="action" value="skip">Continue without Google</button>
-    <p class="hint">Website audits work either way. You can connect Google later in the chat.</p>
+    <p class="hint">Website audits work either way. You can connect Google (any account) later in the chat.</p>
   </form>
   <footer><a href="/privacy" target="_blank" rel="noopener">Privacy</a> · by ${escape(BRAND.name)}</footer>
 </main>

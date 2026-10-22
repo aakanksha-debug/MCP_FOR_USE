@@ -157,6 +157,7 @@ describe("connector sign-in", () => {
     const consent = new URL(await google.beginLoginAuthorization(start.requestId));
     expect(consent.searchParams.get("scope")).toContain("webmasters.readonly");
     expect(consent.searchParams.get("scope")).toContain("analytics.readonly");
+    expect(consent.searchParams.get("prompt")).toBe("select_account consent");
 
     const result = await google.completeAuthorization(consent.searchParams.get("state")!, "google-code");
     expect(result.email).toBe("owner@acme.test");
@@ -256,5 +257,15 @@ describe("connector sign-in", () => {
     const text = await status.text();
     // The signed-in connection was used (no connectionId passed); it does not exist in this test store.
     expect(text).toContain("No connection found");
+
+    // The site's data may live under another Google account: a separate sign-in is offered.
+    const other = await call(
+      { jsonrpc: "2.0", id: 3, method: "tools/call", params: { name: "google_connect", arguments: { differentAccount: true } } },
+      String(tokens.access_token),
+    );
+    const otherText = await other.text();
+    expect(otherText).toContain("https://audit.example.test/api/google/connect?start=");
+    expect(otherText).toContain("need not be the one they use for Claude");
+    expect(otherText).toMatch(/connectionId: `gconn_/);
   });
 });

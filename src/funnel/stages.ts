@@ -34,7 +34,7 @@ export type GoogleState = boolean | "no_data";
 
 const DEEP_AUDIT_STEP = "**Continue → Deep Data-Driven Audit** to combine the website, Search Console and Analytics data and rank every issue by real business impact.";
 const NO_DATA_STEP =
-  "For data-backed priorities, add the Google account you signed in with as a user of this site's Search Console and Google Analytics (or reconnect the connector with the account that has them).";
+  "The Google account you signed in with has no data for this site. If the site's Search Console or Analytics is under another Google account, say \"connect a different Google account\" and sign in with that one (or add the signed-in account as a user of the property).";
 
 /** After the Stage 1 audit: safe fixes first, then Google data. */
 export function nextAfterAudit(counts: TierCounts, googleConnected: GoogleState): string {

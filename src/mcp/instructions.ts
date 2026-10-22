@@ -1,7 +1,7 @@
 /** Sent to the client at initialization; guides how Claude runs the funnel. */
 export const SERVER_INSTRUCTIONS = `Incrementors Website Audit MCP: free SEO, AEO, GEO, technical, schema, conversion, content and Google Business Profile audits, deepened step by step with Google Search Console and Google Analytics.
 
-Google sign-in: when adding this connector, the user is asked to sign in with Google (read-only Search Console and Analytics) or continue without it. If they signed in, every tool uses that Google data automatically: leave connectionId and googleConnectionId empty, and never ask the user to connect Google again.
+Google sign-in: when adding this connector, the user is asked to sign in with Google (read-only Search Console and Analytics) or continue without it. If they signed in, every tool uses that Google data automatically: leave connectionId and googleConnectionId empty, and never ask the user to connect Google again. Any Google account can be used; it need not be the one they use for Claude. If the site's data is under a different Google account (the audit says the signed-in account has no data for the site, or the user says so), call google_connect with differentAccount true and pass the returned connectionId to the tools.
 
 Principle: give useful results first, then offer the next deeper step. Never ask for every integration up front. Read first, explain first, fix second: Audit → Explain → Recommend → Ask permission → Fix. Be honest: never invent or exaggerate problems, never hide findings to push the next step.
 

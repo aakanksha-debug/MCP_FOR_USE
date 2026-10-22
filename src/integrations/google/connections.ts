@@ -48,6 +48,8 @@ type StoredConnection = PendingConnection | ActiveConnection;
 interface StartRecord {
   connectionKey: string;
   scopes: string[];
+  /** False when adding a service to an existing connection (same Google account). */
+  chooseAccount?: boolean;
 }
 
 interface StateRecord {
@@ -132,7 +134,7 @@ export async function createConnection(
 
   const startToken = randomToken(24);
   const wanted = [...new Set([...alreadyGranted, ...services])];
-  await store.set<StartRecord>(`gstart:${startToken}`, { connectionKey, scopes: scopesFor(wanted) }, PENDING_TTL);
+  await store.set<StartRecord>(`gstart:${startToken}`, { connectionKey, scopes: scopesFor(wanted), chooseAccount: !adding }, PENDING_TTL);
   return {
     connectionId,
     signInUrl: `${publicBaseUrl()}/api/google/connect?start=${encodeURIComponent(startToken)}`,
@@ -149,7 +151,9 @@ export async function beginAuthorization(startToken: string): Promise<string> {
   const state = randomToken(24);
   const verifier = randomToken(48);
   await store.set<StateRecord>(`gstate:${state}`, { connectionKey: start.connectionKey, verifier }, STATE_TTL);
-  return buildAuthorizationUrl(config, state, pkceChallenge(verifier), start.scopes ?? scopesFor(["search_console", "analytics"]));
+  return buildAuthorizationUrl(config, state, pkceChallenge(verifier), start.scopes ?? scopesFor(["search_console", "analytics"]), {
+    chooseAccount: start.chooseAccount !== false,
+  });
 }
 
 /**

@@ -23,7 +23,7 @@ export function registerGoogleTools(server: McpServer): void {
     {
       title: "Connect Google Search Console or Analytics",
       description:
-        "Starts a read-only Google sign-in, one service at a time. Funnel order: first services ['search_console'] (after the website audit and safe fixes), later ['analytics'] with the same connectionId to add GA4 after the search analysis. Returns a sign-in link for the user and the connectionId to pass to the analysis tools.",
+        "Starts a read-only Google sign-in, one service at a time. Funnel order: first services ['search_console'] (after the website audit and safe fixes), later ['analytics'] with the same connectionId to add GA4 after the search analysis. Returns a sign-in link for the user and the connectionId to pass to the analysis tools. The user can pick any Google account; it need not match their Claude account. Set differentAccount when the site's data is under another Google account than the one signed in for this connector.",
       inputSchema: z.object({
         services: z
           .array(z.enum(["search_console", "analytics"]))
@@ -32,31 +32,35 @@ export function registerGoogleTools(server: McpServer): void {
           .optional()
           .describe("Which Google data to connect (default: search_console)"),
         connectionId: connectionIdField.optional().describe("Existing connectionId, to add a service to the same connection"),
+        differentAccount: z
+          .boolean()
+          .optional()
+          .describe("Connect a different Google account (for example when the site's Search Console or Analytics belongs to another account). Returns a new connectionId to pass to the tools."),
       }),
       annotations: { readOnlyHint: false, openWorldHint: true },
     },
-    guard(async ({ services, connectionId }, ctx) => {
-      const wanted = services ?? ["search_console"];
+    guard(async ({ services, connectionId, differentAccount }, ctx) => {
+      const wanted = differentAccount && !services ? (["search_console", "analytics"] as const) : (services ?? ["search_console"]);
       const session = sessionGoogleConnection(ctx);
-      let existing = connectionId;
-      if (!existing && session) {
+      let existing = differentAccount ? undefined : connectionId;
+      if (!existing && session && !differentAccount) {
         const status = await connectionStatus(session);
         if (status.status === "connected") {
           const missing = wanted.filter((service) => !(service === "search_console" ? status.searchConsole : status.analytics));
           if (!missing.length) {
             return text(
-              `Google is already connected for this session (signed in as ${status.email ?? "a Google account"} when the connector was added). Search Console: ${status.searchConsole ? "yes" : "no"}. Google Analytics: ${status.analytics ? "yes" : "no"}. No sign-in link or connectionId is needed: the audit and analysis tools use this data automatically.`,
+              `Google is already connected for this session (signed in as ${status.email ?? "a Google account"} when the connector was added). Search Console: ${status.searchConsole ? "yes" : "no"}. Google Analytics: ${status.analytics ? "yes" : "no"}. No sign-in link or connectionId is needed: the audit and analysis tools use this data automatically. If this site's data is under another Google account, call google_connect with differentAccount true.`,
             );
           }
           existing = session;
         }
       }
-      const connection = await createConnection(wanted, existing);
+      const connection = await createConnection([...wanted], existing);
       const label = wanted.map((service) => (service === "search_console" ? "Search Console" : "Google Analytics")).join(" and ");
       return text(
         [
           `## Connect ${label} (read-only)`,
-          `1. Ask the user to open this link and sign in with the Google account that has access to their ${label}: ${connection.signInUrl}`,
+          `1. Ask the user to open this link and choose the Google account that has access to their ${label} (any account, it need not be the one they use for Claude): ${connection.signInUrl}`,
           `2. The link works once and expires in ${connection.expiresInMinutes} minutes.`,
           "3. When the user says they are done, call google_connection_status to confirm.",
           "",
@@ -64,7 +68,7 @@ export function registerGoogleTools(server: McpServer): void {
             ? "This adds access to the Google account signed in for this connector. No connectionId is needed."
             : connection.adding
               ? "This adds access to the existing connection; keep using the same connectionId."
-              : `connectionId: \`${connection.connectionId}\``,
+              : `connectionId: \`${connection.connectionId}\`${differentAccount ? " (pass it as connectionId / googleConnectionId so the tools use this account instead of the one signed in for the connector)" : ""}`,
           "",
           "Access is read-only. The user can disconnect any time with google_disconnect, or revoke access at https://myaccount.google.com/permissions.",
         ].join("\n"),

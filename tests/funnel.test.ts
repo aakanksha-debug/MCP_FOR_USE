@@ -151,10 +151,10 @@ describe("audit with Google signed in", () => {
     expect(text).not.toContain("Based on: website audit");
   });
 
-  it("explains missing data instead of offering another Google sign-in", () => {
+  it("explains missing data and offers signing in with the account that has it", () => {
     const text = formatDataHighlights(undefined, ["Search Console data could not be used: no property for shop.test."]);
     expect(text).toContain("no property for shop.test");
-    expect(nextAfterAudit({ safe: 0, medium: 1, high: 0 }, "no_data")).toContain("add the Google account you signed in with");
+    expect(nextAfterAudit({ safe: 0, medium: 1, high: 0 }, "no_data")).toContain('say "connect a different Google account"');
     expect(nextAfterAudit({ safe: 2, medium: 1, high: 0 }, true)).toContain("Continue → Deep Data-Driven Audit");
     expect(nextAfterAudit({ safe: 2, medium: 1, high: 0 }, true)).not.toContain("Connect Google Search Console");
   });
@@ -196,6 +196,8 @@ describe("progressive Google consent", () => {
     const first = await google.createConnection(["search_console"]);
     const firstUrl = new URL(await google.beginAuthorization(new URL(first.signInUrl).searchParams.get("start")!));
     expect(firstUrl.searchParams.get("scope")).toBe("openid email https://www.googleapis.com/auth/webmasters.readonly");
+    // A new connection lets the user choose any Google account.
+    expect(firstUrl.searchParams.get("prompt")).toBe("select_account consent");
     await google.completeAuthorization(firstUrl.searchParams.get("state")!, "code1");
     expect(await google.connectionStatus(first.connectionId)).toMatchObject({ searchConsole: true, analytics: false });
     await expect(google.getAccessToken(first.connectionId, "analytics")).rejects.toThrow(/Google Analytics isn't connected yet/);
@@ -206,6 +208,8 @@ describe("progressive Google consent", () => {
     const secondUrl = new URL(await google.beginAuthorization(new URL(second.signInUrl).searchParams.get("start")!));
     expect(secondUrl.searchParams.get("scope")).toContain("webmasters.readonly");
     expect(secondUrl.searchParams.get("scope")).toContain("analytics.readonly");
+    // Adding a service stays on the same account.
+    expect(secondUrl.searchParams.get("prompt")).toBe("consent");
     await google.completeAuthorization(secondUrl.searchParams.get("state")!, "code2");
     expect(await google.connectionStatus(first.connectionId)).toMatchObject({ searchConsole: true, analytics: true });
     await expect(google.getAccessToken(first.connectionId, "analytics")).resolves.toBe("a2");
