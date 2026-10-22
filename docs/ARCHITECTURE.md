@@ -26,7 +26,7 @@ src/funnel/                  The progressive journey: one "Continue → …" nex
 src/fixes/                   Fix generators (minor, content-only), drafts (approved medium), policy enforcement
 src/platforms/               Publishing adapters (WordPress), reversible content ops, website connections
 src/approvals/               Approval records, staging, publish and undo (owner-triggered only)
-src/integrations/            Google (OAuth, GSC, GA4), PageSpeed Insights, storage (Redis/memory, encryption)
+src/integrations/            Google (OAuth, GSC, GA4), PageSpeed Insights, storage (Redis/Vercel Blob/memory, encryption)
 src/core/                    Safe fetching, HTML extraction, robots/sitemap parsing, per-call context, types
 src/config/                  Environment access and Incrementors brand/service links
 ```

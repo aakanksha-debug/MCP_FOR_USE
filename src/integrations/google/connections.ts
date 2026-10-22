@@ -75,9 +75,9 @@ function dependencies(): Dependencies {
   }
   const store = getStore();
   if (!store) {
-    console.warn("[google] Sign-in requested but no Redis storage is configured (add Upstash Redis in Vercel).");
+    console.warn("[google] Sign-in requested but no storage is configured (connect a private Vercel Blob store or Upstash Redis).");
     throw new GoogleIntegrationError(
-      "Connecting Google Search Console and Analytics isn't available on this server yet. Your audit results are complete without it. (Server admin: add Upstash Redis storage in Vercel.)",
+      "Connecting Google Search Console and Analytics isn't available on this server yet. Your audit results are complete without it. (Server admin: connect a private Vercel Blob store or Upstash Redis to the project.)",
       "storage_unavailable",
     );
   }

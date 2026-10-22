@@ -48,7 +48,7 @@ function dependencies(): { store: KeyValueStore; key: Buffer } {
   const store = getStore();
   if (!key || !store) {
     throw new PlatformError(
-      "Publishing fixes to websites is not configured on this server yet (it needs TOKEN_ENCRYPTION_KEY and Redis storage). Prepared fixes can still be applied by hand.",
+      "Publishing fixes to websites is not configured on this server yet (it needs TOKEN_ENCRYPTION_KEY and a private Vercel Blob store or Redis). Prepared fixes can still be applied by hand.",
     );
   }
   return { store, key };

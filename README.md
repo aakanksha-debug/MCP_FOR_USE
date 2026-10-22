@@ -92,7 +92,7 @@ To try it in Claude Desktop locally, add the URL through `mcp-remote` (see the [
 
 ## Deployment
 
-See [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) for Vercel, environment variables, Upstash Redis and Google OAuth setup. Architecture and extension guides are in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
+See [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) for Vercel, environment variables, storage (Vercel Blob or Upstash Redis) and Google OAuth setup. Architecture and extension guides are in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
 ## Security
 

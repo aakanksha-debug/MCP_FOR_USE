@@ -67,6 +67,18 @@ export function redisRestConfig(): RedisRestConfig | null {
   return url && token ? { url, token } : null;
 }
 
+export interface BlobStorageConfig {
+  /** Static read-write token; absent when the store is reached through Vercel OIDC. */
+  token?: string;
+}
+
+/** A private Vercel Blob store connected to the project, or null. */
+export function blobStorageConfig(): BlobStorageConfig | null {
+  const token = read("BLOB_READ_WRITE_TOKEN");
+  if (token) return { token };
+  return read("BLOB_STORE_ID") ? {} : null;
+}
+
 export function pageSpeedApiKey(): string | undefined {
   return read("PAGESPEED_API_KEY");
 }

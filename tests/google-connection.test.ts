@@ -12,6 +12,8 @@ describe("Google connection lifecycle", () => {
     vi.stubEnv("PUBLIC_BASE_URL", "https://audit.example.test");
     vi.stubEnv("KV_REST_API_URL", "");
     vi.stubEnv("UPSTASH_REDIS_REST_URL", "");
+    vi.stubEnv("BLOB_READ_WRITE_TOKEN", "");
+    vi.stubEnv("BLOB_STORE_ID", "");
     vi.stubEnv("VERCEL", "");
     vi.stubEnv("VERCEL_ENV", "");
   });
