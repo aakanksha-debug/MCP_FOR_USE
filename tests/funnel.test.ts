@@ -1,7 +1,7 @@
 import { randomBytes } from "node:crypto";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { runFullAudit } from "@/audits";
-import { buildDeepAudit, formatDeepAudit } from "@/analysis/deep-audit";
+import { buildDeepAudit, formatDataHighlights, formatDeepAudit } from "@/analysis/deep-audit";
 import { analyzeSearch, formatSearchAnalysis, type SearchAnalysisInput } from "@/analysis/search-performance";
 import { analyzeTraffic, formatTrafficAnalysis, type TrafficInput } from "@/analysis/traffic";
 import { createAuditContext } from "@/core/context";
@@ -134,6 +134,29 @@ describe("deep data-driven audit", () => {
     expect(text).toContain("🔴 Strategic / expert work");
     expect(text).toContain("A mistake here can remove pages from Google entirely.");
     expect(text).toContain("Connect with an Incrementors SEO/AEO/GEO strategist");
+  });
+});
+
+describe("audit with Google signed in", () => {
+  it("adds the strongest data findings and the data-backed website issues", () => {
+    const issues = classify([
+      { code: "seo.meta_description.length", url: `${SITE}pricing/` },
+      { code: "seo.images.missing_alt", url: `${SITE}about/` },
+    ]);
+    const deep = buildDeepAudit({ site: SITE, issues, search: analyzeSearch(searchInput), traffic: analyzeTraffic(trafficInput) });
+    const text = formatDataHighlights(deep, []);
+    expect(text).toContain("### What your Google data shows");
+    expect(text).toContain("Based on: Search Console (Last 28 days) + Google Analytics (Last 28 days)");
+    expect(text).toContain("/pricing/");
+    expect(text).not.toContain("Based on: website audit");
+  });
+
+  it("explains missing data instead of offering another Google sign-in", () => {
+    const text = formatDataHighlights(undefined, ["Search Console data could not be used: no property for shop.test."]);
+    expect(text).toContain("no property for shop.test");
+    expect(nextAfterAudit({ safe: 0, medium: 1, high: 0 }, "no_data")).toContain("add the Google account you signed in with");
+    expect(nextAfterAudit({ safe: 2, medium: 1, high: 0 }, true)).toContain("Continue → Deep Data-Driven Audit");
+    expect(nextAfterAudit({ safe: 2, medium: 1, high: 0 }, true)).not.toContain("Connect Google Search Console");
   });
 });
 

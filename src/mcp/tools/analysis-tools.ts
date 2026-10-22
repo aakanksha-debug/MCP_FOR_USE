@@ -12,6 +12,7 @@ import { nextAfterSearch, nextAfterTraffic } from "@/funnel/stages";
 import { getIssueDefinition } from "@/policy/catalog";
 import { classify } from "@/policy/classify";
 import { guard, text } from "../respond";
+import { requireGoogleConnection } from "../session";
 import { connectionIdField, gscPropertyField, issueRefField, urlField } from "../schemas";
 
 const READ_ONLY = { readOnlyHint: true, openWorldHint: true } as const;
@@ -28,7 +29,8 @@ export function registerAnalysisTools(server: McpServer): void {
       inputSchema: z.object({ connectionId: connectionIdField, siteUrl: urlField, gscProperty: gscPropertyField, days: daysField }),
       annotations: READ_ONLY,
     },
-    guard(async ({ connectionId, siteUrl, gscProperty, days }) => {
+    guard(async ({ connectionId: explicitId, siteUrl, gscProperty, days }, ctx) => {
+      const connectionId = requireGoogleConnection(explicitId, ctx);
       const site = normalizeTargetUrl(siteUrl).toString();
       const analysis = await loadSearchAnalysis(connectionId, site, { ...(gscProperty ? { property: gscProperty } : {}), ...(days ? { days } : {}) });
       return text(formatSearchAnalysis(analysis) + nextAfterSearch(await hasAnalytics(connectionId)));
@@ -44,7 +46,8 @@ export function registerAnalysisTools(server: McpServer): void {
       inputSchema: z.object({ connectionId: connectionIdField, siteUrl: urlField, propertyId: propertyIdField, days: daysField }),
       annotations: READ_ONLY,
     },
-    guard(async ({ connectionId, siteUrl, propertyId, days }) => {
+    guard(async ({ connectionId: explicitId, siteUrl, propertyId, days }, ctx) => {
+      const connectionId = requireGoogleConnection(explicitId, ctx);
       const site = normalizeTargetUrl(siteUrl).toString();
       const analysis = await loadTrafficAnalysis(connectionId, site, { ...(propertyId ? { propertyId } : {}), ...(days ? { days } : {}) });
       return text(formatTrafficAnalysis(analysis) + nextAfterTraffic());
@@ -67,7 +70,8 @@ export function registerAnalysisTools(server: McpServer): void {
       }),
       annotations: READ_ONLY,
     },
-    guard(async ({ connectionId, siteUrl, issues, gscProperty, propertyId, days }) => {
+    guard(async ({ connectionId: explicitId, siteUrl, issues, gscProperty, propertyId, days }, ctx) => {
+      const connectionId = requireGoogleConnection(explicitId, ctx);
       const site = normalizeTargetUrl(siteUrl).toString();
       const notes: string[] = [];
       const auditPromise: Promise<Issue[]> = issues?.length

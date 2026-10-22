@@ -8,7 +8,10 @@ import { NextResponse, type NextRequest } from "next/server";
 export function proxy(request: NextRequest) {
   const wantsStream = request.headers.get("accept")?.includes("text/event-stream") ?? false;
   if (request.method === "POST" || request.method === "DELETE" || wantsStream) {
-    return NextResponse.rewrite(new URL("/api/mcp", request.url));
+    // Tells the MCP route the connector was added with the root URL, for the sign-in discovery link.
+    const headers = new Headers(request.headers);
+    headers.set("x-mcp-entry", "root");
+    return NextResponse.rewrite(new URL("/api/mcp", request.url), { request: { headers } });
   }
   return NextResponse.next();
 }

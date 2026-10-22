@@ -1,16 +1,19 @@
 # Architecture
 
-The project is a Next.js app on Vercel that exposes one MCP endpoint (`/api/mcp`, Streamable HTTP via [`mcp-handler`](https://www.npmjs.com/package/mcp-handler)) plus two routes for the optional Google sign-in. Everything else lives in `src/`, split into layers that only depend downward.
+The project is a Next.js app on Vercel that exposes one MCP endpoint (`/api/mcp`, Streamable HTTP via [`mcp-handler`](https://www.npmjs.com/package/mcp-handler)), a small OAuth server for signing in when the connector is added, and routes for the Google sign-in. Everything else lives in `src/`, split into layers that only depend downward.
 
 ```
 app/                         HTTP surface (Next.js route handlers and pages)
-  api/mcp/route.ts           MCP endpoint
+  api/mcp/route.ts           MCP endpoint (requires the connector sign-in)
+  .well-known/oauth-*        OAuth discovery: authorization server and protected resource metadata
+  oauth/register|authorize|token  Connector sign-in: client registration, "Sign in with Google" page, tokens
   connect/[token]            Owner connects their website (consent + credentials)
   approve/[token]            Owner reviews, approves, rejects or undoes staged fixes
   api/google/connect         One-time sign-in link → Google consent screen
   api/google/callback        OAuth callback → stores encrypted tokens
   page.tsx, privacy/         Landing and privacy pages
 
+src/auth/                    Connector sign-in (OAuth 2.1 authorization server, sealed client IDs and tokens)
 src/mcp/                     MCP layer: tool registration, schemas, formatting, server instructions
   tools/audit-tools.ts       8 audit tools + run_full_audit
   tools/google-tools.ts      Google connection, Search Console and GA4 tools
@@ -65,14 +68,24 @@ Each tool returns value for its stage and ends with exactly one next step from `
 
 ## Google connection model
 
-The MCP is authless so anyone can add it without signing in. Google access is opt-in per conversation:
+**At connector setup (default).** The MCP endpoint answers unauthenticated requests with a 401 that points to the OAuth metadata, so Claude starts a sign-in when the connector is added:
+
+1. Claude registers itself at `/oauth/register` (dynamic client registration). The client ID is the sealed registration, so nothing is stored.
+2. `/oauth/authorize` validates the client, redirect URI and PKCE challenge and shows a page with **Sign in with Google** (Search Console and Analytics, read-only, one consent) or **Continue without Google**.
+3. After Google consent, `/api/google/callback` stores the encrypted Google tokens under a new connection ID and redirects back to Claude with a one-time code.
+4. `/oauth/token` exchanges the code (PKCE checked) for a 1-hour access token and a 90-day refresh token. Both are AES-256-GCM sealed with a key derived from `TOKEN_ENCRYPTION_KEY` and carry the Google connection ID.
+5. Every MCP request carries the access token, so tools read the Google connection from it: `run_full_audit` reads Search Console and GA4 in parallel with the crawl, and the other tools need no `connectionId`.
+
+`MCP_SIGN_IN=off` turns the sign-in off and makes the MCP authless again.
+
+**Later, in a conversation.** Users who continued without Google can still connect per conversation:
 
 1. `google_connect` creates a random `connectionId` (returned to Claude) and a one-time `start` token (in the sign-in link). Only a SHA-256 hash of the connection ID is used as the storage key.
 2. `/api/google/connect` consumes the start token and redirects to Google with a random `state` and a PKCE challenge.
 3. `/api/google/callback` consumes the state, exchanges the code with the PKCE verifier and stores AES-256-GCM encrypted tokens for 30 days.
 4. Tools call `getAccessToken(connectionId)`, which refreshes tokens when needed. `google_disconnect` revokes them at Google and deletes them.
 
-The connection ID works like a bearer token inside the user's Claude conversation. A future upgrade path is MCP-native OAuth (the user signs in when adding the connector, using `withMcpAuth` from `mcp-handler`), which ties Google access to an authenticated user instead of an ID in the conversation.
+In this path the connection ID works like a bearer token inside the user's Claude conversation.
 
 ## Testing
 

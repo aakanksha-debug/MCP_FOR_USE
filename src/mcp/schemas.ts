@@ -11,11 +11,14 @@ export const connectionIdField = z
   .string()
   .min(10)
   .max(200)
-  .describe("Google connection ID returned by google_connect (treat it like a password)");
-
-export const optionalConnectionIdField = connectionIdField
   .optional()
-  .describe("Optional Google connection ID from google_connect, to include Search Console data");
+  .describe(
+    "Google connection ID returned by google_connect (treat it like a password). Leave empty when the user signed in with Google while adding the connector.",
+  );
+
+export const optionalConnectionIdField = connectionIdField.describe(
+  "Optional Google connection ID from google_connect. Leave empty when the user signed in with Google while adding the connector; that data is then used automatically.",
+);
 
 export const gscPropertyField = z
   .string()

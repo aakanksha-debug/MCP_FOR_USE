@@ -25,17 +25,34 @@ export const SEARCH_CONSOLE_PITCH =
 export const ANALYTICS_PITCH =
   "Search Console shows how people find your website. Google Analytics shows what happens after they arrive: which pages keep visitors, which traffic sources work, and whether visits turn into enquiries or sales.";
 
-/** After the Stage 1 audit: safe fixes first, then Search Console. */
-export function nextAfterAudit(counts: TierCounts, googleConnected: boolean): string {
+/**
+ * Google state for the audit's next step: true when Search Console or
+ * Analytics data was used, "no_data" when the user signed in but that account
+ * has no data for this site, false when Google is not connected.
+ */
+export type GoogleState = boolean | "no_data";
+
+const DEEP_AUDIT_STEP = "**Continue → Deep Data-Driven Audit** to combine the website, Search Console and Analytics data and rank every issue by real business impact.";
+const NO_DATA_STEP =
+  "For data-backed priorities, add the Google account you signed in with as a user of this site's Search Console and Google Analytics (or reconnect the connector with the account that has them).";
+
+/** After the Stage 1 audit: safe fixes first, then Google data. */
+export function nextAfterAudit(counts: TierCounts, googleConnected: GoogleState): string {
   if (counts.safe > 0) {
     return block("Next step: safe fixes", [
       `I found **${counts.safe} issue${counts.safe === 1 ? "" : "s"} that can be safely fixed** (content-level changes like titles, descriptions, alt text and links). Would you like me to fix ${counts.safe === 1 ? "it" : "them"}?`,
       "Nothing changes without your permission, and you approve every change before it goes live.",
       "",
-      `Then: **Continue → Connect Google Search Console** to see which issues actually affect your Google visibility.`,
+      googleConnected === true
+        ? `Then: ${DEEP_AUDIT_STEP}`
+        : googleConnected === "no_data"
+          ? `Then: ${NO_DATA_STEP}`
+          : `Then: **Continue → Connect Google Search Console** to see which issues actually affect your Google visibility.`,
     ]);
   }
-  return googleConnected ? nextAfterFixes(true) : nextAfterFixes(false);
+  if (googleConnected === true) return block("Next step: deep, data-driven audit", [DEEP_AUDIT_STEP]);
+  if (googleConnected === "no_data") return block("Next step: connect the right Google data", [NO_DATA_STEP]);
+  return nextAfterFixes(false);
 }
 
 /** After safe fixes (or when there are none): Search Console. */

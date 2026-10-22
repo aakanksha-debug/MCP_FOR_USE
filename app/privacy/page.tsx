@@ -17,7 +17,9 @@ export default function Privacy() {
 
       <h2>Google Search Console and Google Analytics (optional)</h2>
       <p>
-        If you choose to connect Google, you grant read-only access to Search Console and Google Analytics data. Access
+        When you add the connector you can sign in with Google or continue without it, and you can also connect Google
+        later in a conversation. If you choose to connect Google, you grant read-only access to Search Console and Google
+        Analytics data. Access
         tokens are encrypted and stored for up to 30 days so Claude can query your data during your analysis. The data is
         used only to answer your requests and is not sold or shared. You can disconnect at any time by asking Claude to
         disconnect Google, or by revoking access at{" "}

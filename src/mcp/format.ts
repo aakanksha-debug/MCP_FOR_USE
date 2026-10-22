@@ -1,6 +1,6 @@
 import type { FullAuditResult } from "@/audits";
 import type { AuditId, AuditResult, Impact, Issue, Tier } from "@/core/types";
-import { expertConversion, nextAfterAudit } from "@/funnel/stages";
+import { expertConversion, nextAfterAudit, type GoogleState } from "@/funnel/stages";
 import type { ExpertRecommendation } from "@/decision/recommend";
 import type { VerifiedIssue } from "@/decision/verify";
 import type { StageSummary } from "@/approvals/stage";
@@ -278,7 +278,8 @@ function findingBlock(group: IssueGroup, index: number): string {
 }
 
 /** Stage 1: score, category scores, opportunity count, top findings, one next step. */
-export function formatAuditSummary(full: FullAuditResult, googleConnected: boolean, topCount = 5): string {
+/** Stage 1 result. `dataSection` (Google data highlights) goes right before the next step. */
+export function formatAuditSummary(full: FullAuditResult, googleConnected: GoogleState, topCount = 5, dataSection = ""): string {
   const host = (() => {
     try {
       return new URL(full.target).hostname;
@@ -313,7 +314,7 @@ export function formatAuditSummary(full: FullAuditResult, googleConnected: boole
     ...(allRefs.length
       ? ["", `<details><summary>All ${full.issues.length} findings (codes for follow-up tools; show only if the user asks)</summary>`, "", ...allRefs, "</details>"]
       : []),
-  ].join("\n") + nextAfterAudit(counts, googleConnected);
+  ].join("\n") + dataSection + nextAfterAudit(counts, googleConnected);
 }
 
 export { expertConversion };

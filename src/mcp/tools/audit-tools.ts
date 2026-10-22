@@ -18,8 +18,11 @@ import { normalizeTargetUrl } from "@/core/url-guard";
 import { expertRecommendation } from "@/decision/recommend";
 import { pathKey } from "@/decision/verify";
 import { loadSearchRows } from "@/integrations/google/site-data";
+import { buildDeepAudit, formatDataHighlights } from "@/analysis/deep-audit";
+import { loadSearchAnalysis, loadTrafficAnalysis } from "@/analysis/load";
 import { formatAuditResult, formatAuditSummary, formatFullAudit } from "../format";
 import { guard, text } from "../respond";
+import { optionalGoogleConnection, sessionGoogleConnection } from "../session";
 import { auditIdField, gbpProfileField, gscPropertyField, optionalConnectionIdField, urlField } from "../schemas";
 
 const READ_ONLY = { readOnlyHint: true, openWorldHint: true, idempotentHint: true } as const;
@@ -52,9 +55,9 @@ export function registerAuditTools(server: McpServer): void {
       }),
       annotations: READ_ONLY,
     },
-    guard(async ({ url, maxPages }) => {
+    guard(async ({ url, maxPages }, ctx) => {
       const result = await runAudit(seoHealthAudit, createAuditContext(), { url, ...(maxPages ? { maxPages } : {}) });
-      return text(formatAuditResult(result, expertRecommendation(result.issues), offerGoogle()));
+      return text(formatAuditResult(result, expertRecommendation(result.issues), offerGoogle(sessionGoogleConnection(ctx))));
     }),
   );
 
@@ -67,9 +70,9 @@ export function registerAuditTools(server: McpServer): void {
       inputSchema: z.object({ url: urlField, profile: gbpProfileField.optional() }),
       annotations: READ_ONLY,
     },
-    guard(async ({ url, profile }) => {
+    guard(async ({ url, profile }, ctx) => {
       const result = await runAudit(gbpAudit, createAuditContext(), { url, ...(profile ? { profile } : {}) });
-      return text(formatAuditResult(result, expertRecommendation(result.issues), offerGoogle()));
+      return text(formatAuditResult(result, expertRecommendation(result.issues), offerGoogle(sessionGoogleConnection(ctx))));
     }),
   );
 
@@ -87,10 +90,11 @@ export function registerAuditTools(server: McpServer): void {
       }),
       annotations: READ_ONLY,
     },
-    guard(async ({ url, questions, googleConnectionId, gscProperty }) => {
+    guard(async ({ url, questions, googleConnectionId, gscProperty }, ctx) => {
       const target = normalizeTargetUrl(url).toString();
+      const connectionId = optionalGoogleConnection(googleConnectionId, ctx);
       const allQuestions = [...(questions ?? [])];
-      const search = await optionalSearchRows(googleConnectionId, target, gscProperty);
+      const search = await optionalSearchRows(connectionId, target, gscProperty);
       if (search.rows) {
         const forPage = search.rows
           .filter((row) => pathKey(row.page) === pathKey(target) && QUESTION_QUERY.test(row.query))
@@ -101,7 +105,7 @@ export function registerAuditTools(server: McpServer): void {
       }
       const result = await runAudit(aeoAudit, createAuditContext(), { url: target, questions: allQuestions });
       if (search.note) result.notes.push(search.note);
-      return text(formatAuditResult(result, expertRecommendation(result.issues), offerGoogle(googleConnectionId)));
+      return text(formatAuditResult(result, expertRecommendation(result.issues), offerGoogle(connectionId)));
     }),
   );
 
@@ -114,9 +118,9 @@ export function registerAuditTools(server: McpServer): void {
       inputSchema: z.object({ url: urlField }),
       annotations: READ_ONLY,
     },
-    guard(async ({ url }) => {
+    guard(async ({ url }, ctx) => {
       const result = await runAudit(geoAudit, createAuditContext(), { url });
-      return text(formatAuditResult(result, expertRecommendation(result.issues), offerGoogle()));
+      return text(formatAuditResult(result, expertRecommendation(result.issues), offerGoogle(sessionGoogleConnection(ctx))));
     }),
   );
 
@@ -129,9 +133,9 @@ export function registerAuditTools(server: McpServer): void {
       inputSchema: z.object({ url: urlField }),
       annotations: READ_ONLY,
     },
-    guard(async ({ url }) => {
+    guard(async ({ url }, ctx) => {
       const result = await runAudit(conversionAudit, createAuditContext(), { url });
-      return text(formatAuditResult(result, expertRecommendation(result.issues), offerGoogle()));
+      return text(formatAuditResult(result, expertRecommendation(result.issues), offerGoogle(sessionGoogleConnection(ctx))));
     }),
   );
 
@@ -147,10 +151,10 @@ export function registerAuditTools(server: McpServer): void {
       }),
       annotations: READ_ONLY,
     },
-    guard(async ({ url, includeCoreWebVitals }) => {
-      const ctx = createAuditContext({ budgetMs: includeCoreWebVitals ? 55_000 : 45_000 });
-      const result = await runAudit(technicalAudit, ctx, { url, includeCoreWebVitals: includeCoreWebVitals ?? false });
-      return text(formatAuditResult(result, expertRecommendation(result.issues), offerGoogle()));
+    guard(async ({ url, includeCoreWebVitals }, ctx) => {
+      const auditContext = createAuditContext({ budgetMs: includeCoreWebVitals ? 55_000 : 45_000 });
+      const result = await runAudit(technicalAudit, auditContext, { url, includeCoreWebVitals: includeCoreWebVitals ?? false });
+      return text(formatAuditResult(result, expertRecommendation(result.issues), offerGoogle(sessionGoogleConnection(ctx))));
     }),
   );
 
@@ -166,9 +170,9 @@ export function registerAuditTools(server: McpServer): void {
       }),
       annotations: READ_ONLY,
     },
-    guard(async ({ url, maxPages }) => {
+    guard(async ({ url, maxPages }, ctx) => {
       const result = await runAudit(schemaAudit, createAuditContext(), { url, ...(maxPages ? { maxPages } : {}) });
-      return text(formatAuditResult(result, expertRecommendation(result.issues), offerGoogle()));
+      return text(formatAuditResult(result, expertRecommendation(result.issues), offerGoogle(sessionGoogleConnection(ctx))));
     }),
   );
 
@@ -187,9 +191,10 @@ export function registerAuditTools(server: McpServer): void {
       }),
       annotations: READ_ONLY,
     },
-    guard(async ({ url, maxPages, priorityTopics, googleConnectionId, gscProperty }) => {
+    guard(async ({ url, maxPages, priorityTopics, googleConnectionId, gscProperty }, ctx) => {
       const target = normalizeTargetUrl(url).toString();
-      const search = await optionalSearchRows(googleConnectionId, target, gscProperty);
+      const connectionId = optionalGoogleConnection(googleConnectionId, ctx);
+      const search = await optionalSearchRows(connectionId, target, gscProperty);
       const result = await runAudit(contentOpportunityAudit, createAuditContext(), {
         url: target,
         ...(maxPages ? { maxPages } : {}),
@@ -197,7 +202,7 @@ export function registerAuditTools(server: McpServer): void {
         ...(search.rows ? { searchRows: search.rows } : {}),
       });
       if (search.note) result.notes.push(search.note);
-      return text(formatAuditResult(result, expertRecommendation(result.issues), offerGoogle(googleConnectionId)));
+      return text(formatAuditResult(result, expertRecommendation(result.issues), offerGoogle(connectionId)));
     }),
   );
 
@@ -206,7 +211,7 @@ export function registerAuditTools(server: McpServer): void {
     {
       title: "Full Website Audit",
       description:
-        "STAGE 1 of the funnel: the free website audit. Runs the checks (SEO, AEO, GEO, technical, schema, conversion, content, and Google Business Profile when the business is local) and returns the overall score, category scores and only the top findings, plus the next step. Use detail='full' only when the user asks to see every finding.",
+        "STAGE 1 of the funnel: the free website audit. Runs the checks (SEO, AEO, GEO, technical, schema, conversion, content, and Google Business Profile when the business is local) and returns the overall score, category scores and only the top findings, plus the next step. When the user signed in with Google while adding the connector, it also reads their Search Console and Google Analytics data for the site and adds data-backed findings automatically. Use detail='full' only when the user asks to see every finding.",
       inputSchema: z.object({
         url: urlField,
         checks: z.array(auditIdField).max(8).optional().describe("Subset of checks to run; omit to run all"),
@@ -219,20 +224,39 @@ export function registerAuditTools(server: McpServer): void {
       }),
       annotations: READ_ONLY,
     },
-    guard(async ({ url, checks, questions, priorityTopics, gbpProfile, googleConnectionId, gscProperty, detail }) => {
+    guard(async ({ url, checks, questions, priorityTopics, gbpProfile, googleConnectionId, gscProperty, detail }, ctx) => {
       const target = normalizeTargetUrl(url).toString();
-      const search = await optionalSearchRows(googleConnectionId, target, gscProperty);
-      const full = await runFullAudit(createAuditContext({ budgetMs: 50_000 }), {
+      const connectionId = optionalGoogleConnection(googleConnectionId, ctx);
+      const input = {
         url: target,
         ...(checks ? { checks } : {}),
         ...(questions ? { questions } : {}),
         ...(priorityTopics ? { priorityTopics } : {}),
         ...(gbpProfile ? { gbpProfile } : {}),
-        ...(search.rows ? { searchRows: search.rows } : {}),
-      });
-      if (search.note) full.results[0]?.notes.push(search.note);
-      if (detail === "full") return text(formatFullAudit(full, expertRecommendation(full.issues), offerGoogle(googleConnectionId)));
-      return text(formatAuditSummary(full, Boolean(googleConnectionId)));
+      };
+      if (!connectionId) {
+        const full = await runFullAudit(createAuditContext({ budgetMs: 50_000 }), input);
+        if (detail === "full") return text(formatFullAudit(full, expertRecommendation(full.issues), true));
+        return text(formatAuditSummary(full, false));
+      }
+
+      // Google is connected: crawl and read Search Console and Analytics at the same time.
+      const notes: string[] = [];
+      const [full, search, traffic] = await Promise.all([
+        runFullAudit(createAuditContext({ budgetMs: 45_000 }), input),
+        loadSearchAnalysis(connectionId, target, gscProperty ? { property: gscProperty } : {}).catch((error: Error) => {
+          notes.push(`Search Console data could not be used: ${error.message}`);
+          return undefined;
+        }),
+        loadTrafficAnalysis(connectionId, target).catch((error: Error) => {
+          notes.push(`Google Analytics data could not be used: ${error.message}`);
+          return undefined;
+        }),
+      ]);
+      const deep = search || traffic ? buildDeepAudit({ site: target, issues: full.issues, ...(search ? { search } : {}), ...(traffic ? { traffic } : {}) }) : undefined;
+      const dataSection = formatDataHighlights(deep, notes);
+      if (detail === "full") return text(formatFullAudit(full, expertRecommendation(full.issues), false) + dataSection);
+      return text(formatAuditSummary(full, deep ? true : "no_data", 5, dataSection));
     }),
   );
 }

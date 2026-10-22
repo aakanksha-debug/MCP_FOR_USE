@@ -1,4 +1,4 @@
-import type { CallToolResult } from "@modelcontextprotocol/server";
+import type { CallToolResult, ServerContext } from "@modelcontextprotocol/server";
 import { AuditTargetError } from "@/audits";
 import { UnsafeUrlError } from "@/core/url-guard";
 import { GoogleIntegrationError } from "@/integrations/google/errors";
@@ -13,10 +13,12 @@ export function failure(message: string): CallToolResult {
 }
 
 /** Converts expected errors into readable tool errors; logs unexpected ones. */
-export function guard<Args>(handler: (args: Args) => Promise<CallToolResult>): (args: Args) => Promise<CallToolResult> {
-  return async (args) => {
+export function guard<Args>(
+  handler: (args: Args, ctx?: ServerContext) => Promise<CallToolResult>,
+): (args: Args, ctx?: ServerContext) => Promise<CallToolResult> {
+  return async (args, ctx) => {
     try {
-      return await handler(args);
+      return await handler(args, ctx);
     } catch (error) {
       if (
         error instanceof AuditTargetError ||

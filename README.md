@@ -73,8 +73,8 @@ The server instructions tell Claude to mention it at most once per conversation 
 ## User flow
 
 1. The user adds the connector URL (`https://<deployment>/api/mcp`; the bare site URL also works) in Claude: Settings → Connectors → Add custom connector.
-2. They give Claude their website URL; Claude picks the relevant checks.
-3. Optionally, Claude calls `google_connect`, the user signs in with Google (read-only), and Claude uses the returned `connectionId` to verify issues with GSC/GA4 data.
+2. Claude opens the sign-in page: **Sign in with Google** (read-only Search Console and Analytics, one consent) or **Continue without Google**.
+3. They give Claude their website URL. With Google signed in, `run_full_audit` reads their Search Console and GA4 data for the site at the same time as the crawl and adds data-backed findings; no extra step or connection ID is needed. Without it, Claude can still offer `google_connect` later in the conversation.
 4. Claude explains the prioritized issues. For minor issues it asks before preparing fixes and, with permission, connects the website; the owner approves each change on the approval page before anything is published. Medium changes need explicit approval; expert-only work is flagged with a clear warning.
 
 ## Local development
@@ -100,6 +100,7 @@ See [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) for Vercel, environment variables, 
 - Audits fetch only public `http(s)` URLs: private, loopback, link-local and metadata addresses are blocked at DNS-resolution time (covers redirects and DNS rebinding), with size, timeout and redirect limits.
 - Website credentials (WordPress application passwords) are entered only on the connect page, verified against the audited domain, AES-256-GCM encrypted, kept 30 days and deletable with `disconnect_website`. Approval and connect forms reject cross-site posts.
 - Google access is read-only (`webmasters.readonly`, `analytics.readonly`), uses PKCE and one-time links, and tokens are AES-256-GCM encrypted under a hashed connection ID with a 30-day expiry. Users can revoke at any time.
+- The connector sign-in is OAuth 2.1 with PKCE (S256 only), exact redirect URI matching (any port only for localhost), one-time 5-minute codes and sealed tokens (1-hour access, 90-day refresh). The sign-in page cannot be framed and its form rejects cross-site posts.
 
 ## Status
 

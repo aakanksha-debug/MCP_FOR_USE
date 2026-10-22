@@ -16,11 +16,12 @@ import {
 /**
  * Connection lifecycle for the optional Google sign-in.
  *
- * The MCP itself is authless so anyone can add it. When a user wants GSC/GA4
- * data, `google_connect` creates a random connection ID (kept in the Claude
- * conversation) and a one-time sign-in link. After Google sign-in the
- * encrypted tokens are stored under a hash of that ID. Only read-only scopes
- * are requested, and `google_disconnect` revokes access.
+ * Two ways in: signing in with Google while adding the connector (the
+ * connection ID then travels inside the connector's access token), or
+ * `google_connect` later in a conversation, which creates a random connection
+ * ID and a one-time sign-in link. Either way the encrypted tokens are stored
+ * under a hash of that ID. Only read-only scopes are requested, and
+ * `google_disconnect` revokes access.
  */
 
 const PENDING_TTL = 30 * 60;
@@ -52,6 +53,8 @@ interface StartRecord {
 interface StateRecord {
   connectionKey: string;
   verifier: string;
+  /** Set when Google sign-in happens while adding the connector. */
+  login?: { requestId: string; connection: string };
 }
 
 interface Dependencies {
@@ -149,7 +152,33 @@ export async function beginAuthorization(startToken: string): Promise<string> {
   return buildAuthorizationUrl(config, state, pkceChallenge(verifier), start.scopes ?? scopesFor(["search_console", "analytics"]));
 }
 
-export async function completeAuthorization(state: string, code: string): Promise<{ email?: string }> {
+/**
+ * Starts the Google sign-in shown while adding the connector: Search Console
+ * and Analytics in one consent. Returns Google's consent URL.
+ */
+export async function beginLoginAuthorization(requestId: string): Promise<string> {
+  const { store, config, key } = dependencies();
+  const connectionId = `${CONNECTION_ID_PREFIX}${randomToken(32)}`;
+  const connectionKey = connectionStorageKey(connectionId);
+  await store.set<StoredConnection>(connectionKey, { status: "pending", createdAt: Date.now() }, PENDING_TTL);
+  const state = randomToken(24);
+  const verifier = randomToken(48);
+  await store.set<StateRecord>(`gstate:${state}`, { connectionKey, verifier, login: { requestId, connection: encrypt(connectionId, key) } }, STATE_TTL);
+  return buildAuthorizationUrl(config, state, pkceChallenge(verifier), scopesFor(["search_console", "analytics"]));
+}
+
+/** When Google sign-in is cancelled: forgets the attempt and returns the connector request to go back to, if any. */
+export async function abandonAuthorization(state: string): Promise<string | undefined> {
+  const store = getStore();
+  if (!store || !/^[A-Za-z0-9_-]{20,64}$/.test(state)) return undefined;
+  const record = await store.take<StateRecord>(`gstate:${state}`);
+  return record?.login?.requestId;
+}
+
+export async function completeAuthorization(
+  state: string,
+  code: string,
+): Promise<{ email?: string; login?: { requestId: string; connectionId: string } }> {
   const { store, config, key } = dependencies();
   const record = await store.take<StateRecord>(`gstate:${state}`);
   if (!record) throw new GoogleIntegrationError("This sign-in attempt has expired. Ask Claude for a new link.", "expired");
@@ -173,7 +202,8 @@ export async function completeAuthorization(state: string, code: string): Promis
     tokens: encrypt(JSON.stringify(tokens), key),
   };
   await store.set<StoredConnection>(record.connectionKey, connection, CONNECTION_TTL);
-  return email ? { email } : {};
+  const login = record.login ? { requestId: record.login.requestId, connectionId: decrypt(record.login.connection, key) } : undefined;
+  return { ...(email ? { email } : {}), ...(login ? { login } : {}) };
 }
 
 export interface ConnectionStatus {

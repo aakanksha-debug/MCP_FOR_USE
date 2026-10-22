@@ -79,6 +79,15 @@ export function blobStorageConfig(): BlobStorageConfig | null {
   return read("BLOB_STORE_ID") ? {} : null;
 }
 
+/**
+ * Whether adding the connector asks the user to sign in (with Google, or
+ * "continue without Google"). On by default; MCP_SIGN_IN=off turns the MCP
+ * back into an open, authless server.
+ */
+export function connectorSignInSetting(): boolean {
+  return read("MCP_SIGN_IN") !== "off";
+}
+
 export function pageSpeedApiKey(): string | undefined {
   return read("PAGESPEED_API_KEY");
 }

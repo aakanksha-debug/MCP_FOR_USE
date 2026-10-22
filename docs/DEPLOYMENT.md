@@ -27,6 +27,7 @@ Set these in **Project → Settings → Environment Variables** (see `.env.examp
 | `PAGESPEED_API_KEY` | Optional | Higher PageSpeed Insights quota for Core Web Vitals. |
 | `INCREMENTORS_CONTACT_URL` | Optional | Overrides the contact link in expert-help replies. |
 | `MCP_VERBOSE_LOGS` | Optional | `true` logs each MCP request. |
+| `MCP_SIGN_IN` | Optional | `off` removes the sign-in step when adding the connector (authless MCP). On by default when `TOKEN_ENCRYPTION_KEY` and storage are set. |
 
 Redeploy after changing variables.
 
@@ -52,7 +53,11 @@ In [Google Cloud Console](https://console.cloud.google.com/):
    - `http://localhost:3000/api/google/callback` (local development)
 6. Copy the client ID and secret into the Vercel variables.
 
-While the app's publishing status is **Testing**, only listed test users can sign in and Google expires refresh tokens after 7 days (users then reconnect). For a public launch, publish the app and complete Google's verification for the sensitive scopes.
+While the app's publishing status is **Testing**, only listed test users can sign in and Google expires refresh tokens after 7 days (users then reconnect). Everyone else can still pick **Continue without Google** when adding the connector. For a public launch, publish the app and complete Google's verification for the sensitive scopes.
+
+## 5. Connector sign-in
+
+Nothing extra to configure: with `TOKEN_ENCRYPTION_KEY` and storage in place, adding the connector in Claude opens a sign-in page with **Sign in with Google** (Search Console and Analytics, read-only) or **Continue without Google**. The same Google redirect URI (`/api/google/callback`) is used. Claude registers itself automatically (dynamic client registration), so no client ID has to be entered in Claude. Users who added the connector before sign-in existed are asked to connect again once.
 
 ## Local development with Google
 
@@ -71,6 +76,5 @@ Not needed for the development deployment; planned once functionality is final:
 - [ ] Error monitoring and structured logs (Sentry or Vercel Observability), without logging tokens or connection IDs.
 - [ ] Google OAuth app verification and a legally reviewed privacy policy and terms.
 - [ ] Custom domain (for example `mcp.incrementors.com`) and listing in Claude's connector directory.
-- [ ] Optional MCP-native OAuth so Google access is tied to a signed-in user rather than a connection ID.
 - [ ] Usage analytics (which tools run, completion rates) to guide the roadmap.
 - [ ] Load test the full audit on large sites; tune page limits and time budgets.

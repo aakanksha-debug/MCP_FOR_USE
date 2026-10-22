@@ -30,6 +30,7 @@ import { classify } from "@/policy/classify";
 import { TIERS } from "@/policy/tiers";
 import { formatFixes, formatStaged, formatVerification } from "../format";
 import { failure, guard, text } from "../respond";
+import { requireGoogleConnection } from "../session";
 import { auditIdField, connectionIdField, gscPropertyField, issueRefField, urlField } from "../schemas";
 
 const MAX_INSPECTIONS = 5;
@@ -59,11 +60,11 @@ export function registerDecisionTools(server: McpServer): void {
       }),
       annotations: { readOnlyHint: true, openWorldHint: true },
     },
-    guard(async ({ connectionId, siteUrl, issues, gscProperty, ga4PropertyId, days }) => {
+    guard(async ({ connectionId, siteUrl, issues, gscProperty, ga4PropertyId, days }, ctx) => {
       const unknown = issues.filter((issue) => !getIssueDefinition(issue.code));
       if (unknown.length === issues.length) return failure("None of the issue codes are recognized. Use codes exactly as shown in audit results.");
       const site = normalizeTargetUrl(siteUrl).toString();
-      const accessToken = await getAccessToken(connectionId);
+      const accessToken = await getAccessToken(requireGoogleConnection(connectionId, ctx));
       const period = days ?? 28;
       const notes: string[] = [];
       const data: VerificationData = {

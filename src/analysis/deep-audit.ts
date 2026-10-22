@@ -20,6 +20,8 @@ export interface DeepItem {
   action: string;
   priority: number;
   pages: string[];
+  /** Website issues only: real data confirms or suggests the problem matters. */
+  verified?: boolean;
 }
 
 export interface DeepAudit {
@@ -148,6 +150,7 @@ export function buildDeepAudit(input: { site: string; issues: Issue[]; search?: 
         existing.priority = priority;
         existing.evidence = `${entry.explanation}${issue?.detail ? ` (${issue.detail})` : ""}`;
       }
+      existing.verified ||= entry.status === "confirmed" || entry.status === "likely";
       continue;
     }
     byCode.set(entry.code, {
@@ -159,6 +162,7 @@ export function buildDeepAudit(input: { site: string; issues: Issue[]; search?: 
       action: issue?.recommendation ?? getIssueDefinition(entry.code)?.recommendation ?? "",
       priority,
       pages: [entry.url],
+      verified: entry.status === "confirmed" || entry.status === "likely",
     });
   }
   items.push(...byCode.values());
@@ -181,6 +185,34 @@ export function buildDeepAudit(input: { site: string; issues: Issue[]; search?: 
   };
 }
 
+function itemBlock(item: DeepItem, index: number): string {
+  return [
+    `${index}. ${TIERS[item.tier].emoji} **${item.title}**${item.pages.length > 1 ? ` · ${item.pages.length} pages` : item.pages[0] ? ` · ${path(item.pages[0])}` : ""}`,
+    `   Evidence: ${item.evidence}`,
+    `   ${item.tier === "high" ? "Why it needs an expert" : "Action"}: ${item.tier === "high" ? whyPlanning(item.code, getIssueDefinition(item.code)?.expertReason) : item.action}`,
+  ].join("\n");
+}
+
+/**
+ * Google data block for the first audit when the user signed in with Google:
+ * the strongest search and traffic findings, then the website issues the data
+ * says matter most. Notes explain any data that could not be loaded.
+ */
+export function formatDataHighlights(deep: DeepAudit | undefined, notes: string[], topCount = 5): string {
+  const lines = ["", "", "### What your Google data shows"];
+  if (deep) {
+    lines.push(`Based on: ${deep.sources.filter((source) => source !== "website audit").join(" + ")}`, "");
+    const dataItems = deep.items.filter((item) => item.source !== "website").slice(0, topCount);
+    lines.push(...(dataItems.length ? dataItems.map((item, index) => itemBlock(item, index + 1)) : ["No major search or traffic problems stand out in this period."]));
+    const backed = deep.items.filter((item) => item.source === "website" && item.verified).slice(0, 3);
+    if (backed.length) {
+      lines.push("", "**Website issues on the pages your data says matter most:**", ...backed.map((item) => `- ${TIERS[item.tier].emoji} ${item.title}: ${item.evidence}`));
+    }
+  }
+  if (notes.length) lines.push("", `_${notes.join(" ")}_`);
+  return lines.join("\n");
+}
+
 export function formatDeepAudit(deep: DeepAudit, topCount = 8): string {
   const host = (() => {
     try {
@@ -196,13 +228,7 @@ export function formatDeepAudit(deep: DeepAudit, topCount = 8): string {
     `Based on: ${deep.sources.join(" + ")}`,
     "",
     `### What matters most (ranked by business impact)`,
-    ...top.map((item, index) =>
-      [
-        `${index + 1}. ${TIERS[item.tier].emoji} **${item.title}**${item.pages.length > 1 ? ` · ${item.pages.length} pages` : item.pages[0] ? ` · ${path(item.pages[0])}` : ""}`,
-        `   Evidence: ${item.evidence}`,
-        `   ${item.tier === "high" ? "Why it needs an expert" : "Action"}: ${item.tier === "high" ? whyPlanning(item.code, getIssueDefinition(item.code)?.expertReason) : item.action}`,
-      ].join("\n"),
-    ),
+    ...top.map((item, index) => itemBlock(item, index + 1)),
     "",
     "### Critical issues: who should handle what",
     `**🟢 MCP can safely handle (${byTier("safe").length})**${byTier("safe").length ? ": " + byTier("safe").map((item) => item.title).join("; ") : ""}`,
