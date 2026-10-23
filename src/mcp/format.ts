@@ -1,6 +1,7 @@
 import type { FullAuditResult } from "@/audits";
 import type { AuditId, AuditResult, Impact, Issue, Tier } from "@/core/types";
-import { expertConversion } from "@/funnel/stages";
+import { expertAdviceBlock, expertConversion, type ExpertAdviceItem } from "@/funnel/stages";
+import { getIssueDefinition } from "@/policy/catalog";
 import type { ExpertRecommendation } from "@/decision/recommend";
 import type { VerifiedIssue } from "@/decision/verify";
 import type { StageSummary } from "@/approvals/stage";
@@ -56,8 +57,9 @@ function googleOfferBlock(offer: boolean): string {
   return offer ? `\n\n${GOOGLE_OFFER}` : "";
 }
 
-function recommendationBlock(recommendation: ExpertRecommendation | null): string {
-  return recommendation ? `\n\n**Expert help (optional):** ${recommendation.text}` : "";
+/** The 🔴 issues in a result, for the expert advice block every result ends with. */
+function expertItems(issues: Pick<Issue, "tier" | "title" | "expertReason">[]): ExpertAdviceItem[] {
+  return issues.filter((issue) => issue.tier === "high").map((issue) => ({ title: issue.title, ...(issue.expertReason ? { reason: issue.expertReason } : {}) }));
 }
 
 export function formatAuditResult(result: AuditResult, recommendation: ExpertRecommendation | null, googleOffer = false): string {
@@ -75,7 +77,7 @@ export function formatAuditResult(result: AuditResult, recommendation: ExpertRec
     list("Ask the user", result.askUser),
     list("Notes", result.notes),
     facts,
-    recommendationBlock(recommendation),
+    expertAdviceBlock(expertItems(result.issues), recommendation?.area),
     googleOfferBlock(googleOffer),
   ].join("");
 }
@@ -98,7 +100,7 @@ export function formatFullAudit(full: FullAuditResult, recommendation: ExpertRec
     full.skipped.length ? list("Left out", full.skipped.map((item) => item.reason)) : "",
     list("Ask the user", askUser),
     list("Notes", notes),
-    recommendationBlock(recommendation),
+    expertAdviceBlock(expertItems(full.issues), recommendation?.area),
     googleOfferBlock(googleOffer),
   ].join("\n");
 }
@@ -128,11 +130,21 @@ export function formatVerification(
     "Sorted by priority (impact × traffic × evidence):",
     lines.join("\n"),
     list("Notes", context.notes),
-    recommendationBlock(recommendation),
+    expertAdviceBlock(
+      expertItems(verified.map((item) => ({ tier: item.tier, title: item.title, expertReason: getIssueDefinition(item.code)?.expertReason }))),
+      recommendation?.area,
+    ),
   ].join("\n");
 }
 
-export function formatFixes(results: FixResult[]): string {
+/** Fix requests the policy refused because they need an expert. */
+function expertFixItems(results: FixResult[]): ExpertAdviceItem[] {
+  return results
+    .filter((result) => result.outcome.status === "expert-review")
+    .map((result) => ({ title: result.title, ...(getIssueDefinition(result.code)?.expertReason ? { reason: getIssueDefinition(result.code)!.expertReason! } : {}) }));
+}
+
+export function formatFixes(results: FixResult[], options: { expertBlock?: boolean } = {}): string {
   const blocks = results.map((result) => {
     const emoji = result.tier === "unknown" ? "❔" : TIERS[result.tier].emoji;
     const head = `### ${emoji} ${result.title} \`${result.code}\`\n${result.url}`;
@@ -162,7 +174,7 @@ export function formatFixes(results: FixResult[]): string {
     "Nothing has been changed on the website.",
     "",
     blocks.join("\n\n"),
-  ].join("\n");
+  ].join("\n") + (options.expertBlock === false ? "" : expertAdviceBlock(expertFixItems(results)));
 }
 
 /** Result of staging fixes for owner approval on a connected website. */
@@ -188,12 +200,15 @@ export function formatStaged(results: FixResult[], staged: StageSummary): string
   if (staged.manual.length) {
     lines.push("", "**Manual steps (cannot be published automatically)**", ...staged.manual.map((item) => `- ${item.issueTitle} on ${item.pageUrl}: use "${item.text}". ${item.reason}`));
   }
-  if (staged.expert.length) {
-    lines.push("", "**⚠️ Needs expert advice (not changed)**", ...staged.expert.map((item) => `- ${item.issueTitle} on ${item.pageUrl}: ${item.reason}`));
-  }
   const other = results.filter((result) => ["needs-approval", "draft", "not-detected", "error"].includes(result.outcome.status));
-  if (other.length) lines.push("", formatFixes(other));
-  return lines.join("\n");
+  if (other.length) lines.push("", formatFixes(other, { expertBlock: false }));
+  return (
+    lines.join("\n") +
+    expertAdviceBlock([
+      ...staged.expert.map((item) => ({ title: `${item.issueTitle} (${item.pageUrl})`, reason: item.reason })),
+      ...expertFixItems(results),
+    ])
+  );
 }
 
 // ---------------------------------------------------------------- Stage 1 summary

@@ -1,4 +1,4 @@
-import { BRAND } from "@/config/brand";
+import { BRAND, EXPERTISE_SERVICES, type ExpertiseArea } from "@/config/brand";
 
 /**
  * The progressive funnel. Each stage gives value first, then offers the next
@@ -86,10 +86,37 @@ export function nextAfterTraffic(): string {
   ]);
 }
 
+export interface ExpertAdviceItem {
+  title: string;
+  reason?: string;
+}
+
+export const EXPERT_ADVICE_HEADING = "🔴 Major issues requiring expert advice";
+
 /**
- * Final stage. Recommends an Incrementors strategist only when the audit
- * found expert-level work; otherwise says so plainly.
+ * Ends every audit and analysis result: the major (🔴) issues the MCP will
+ * never change, and the link to an Incrementors SEO strategist. Shown even
+ * when there are none, so the route to expert help is always one click away.
  */
+export function expertAdviceBlock(items: ExpertAdviceItem[], area?: ExpertiseArea): string {
+  const unique = [...new Map(items.map((item) => [item.title, item])).values()];
+  const help = area ? EXPERTISE_SERVICES[area].help : "review them with you and plan the changes safely";
+  const lines = unique.length
+    ? [
+        ...unique.slice(0, 5).map((item) => `- **${item.title}**${item.reason ? `: ${item.reason}` : ""}`),
+        ...(unique.length > 5 ? [`- …and ${unique.length - 5} more`] : []),
+        "",
+        "The MCP will not change these: they affect indexing, site structure, code or tracking, and done wrong they can lose rankings or break the site.",
+        `**Talk to an ${BRAND.strategistLabel}**, who can ${help} (free 30-minute strategy session): ${BRAND.strategySessionUrl}`,
+      ]
+    : [
+        "None found in this check.",
+        `For a deeper review or a growth plan, you can talk to an ${BRAND.strategistLabel} (free 30-minute strategy session): ${BRAND.strategySessionUrl}`,
+      ];
+  return `\n\n### ${EXPERT_ADVICE_HEADING} (${unique.length})\n${lines.join("\n")}`;
+}
+
+/** Final stage summary; the expert block follows it with the strategist link. */
 export function expertConversion(counts: TierCounts): string {
   const total = counts.safe + counts.medium + counts.high;
   const summary = [
@@ -99,7 +126,11 @@ export function expertConversion(counts: TierCounts): string {
     `- 🔴 ${counts.high} require strategic SEO/AEO/GEO expertise`,
   ];
   if (counts.high === 0) {
-    return block("Summary", [...summary, "", "Nothing here needs specialist work. You can handle these with the fixes and recommendations above."]);
+    return block("Summary", [
+      ...summary,
+      "",
+      `Nothing here needs specialist work. You can handle these with the fixes and recommendations above, or talk to an ${BRAND.strategistLabel} for a growth plan: ${BRAND.strategySessionUrl}`,
+    ]);
   }
   return block("Recommended next step", [
     ...summary,

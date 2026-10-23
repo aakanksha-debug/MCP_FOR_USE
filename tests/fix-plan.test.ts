@@ -39,8 +39,8 @@ describe("fix plan", () => {
     expect(text).toContain("Your phone number");
     expect(text).toContain("nothing gets made up");
     expect(text).toContain("Page has more than one H1");
-    expect(text).toContain("⚠️ Needs expert advice");
-    expect(text).toContain("No LocalBusiness structured data: Needs a structured-data code snippet");
+    expect(text).toContain("### 🔴 Major issues requiring expert advice");
+    expect(text).toContain("**No LocalBusiness structured data**: Needs a structured-data code snippet");
     expect(text).toContain("Incrementors SEO strategist");
     expect(text).toContain("Never paste passwords or tokens");
   });

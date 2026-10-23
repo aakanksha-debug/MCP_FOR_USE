@@ -1,14 +1,14 @@
 import type { McpServer } from "@modelcontextprotocol/server";
 import { z } from "zod";
 import { runFullAudit, type FullAuditResult } from "@/audits";
-import { buildDeepAudit, formatDeepAudit } from "@/analysis/deep-audit";
+import { buildDeepAudit, expertAdviceItems, formatDeepAudit } from "@/analysis/deep-audit";
 import { hasAnalytics, loadSearchAnalysis, loadTrafficAnalysis } from "@/analysis/load";
 import { formatSearchAnalysis } from "@/analysis/search-performance";
 import { formatTrafficAnalysis } from "@/analysis/traffic";
 import { createAuditContext } from "@/core/context";
 import type { Issue } from "@/core/types";
 import { normalizeTargetUrl } from "@/core/url-guard";
-import { nextAfterSearch, nextAfterTraffic } from "@/funnel/stages";
+import { expertAdviceBlock, nextAfterSearch, nextAfterTraffic } from "@/funnel/stages";
 import { getIssueDefinition } from "@/policy/catalog";
 import { classify } from "@/policy/classify";
 import { guard, text } from "../respond";
@@ -33,7 +33,8 @@ export function registerAnalysisTools(server: McpServer): void {
       const connectionId = requireGoogleConnection(explicitId, ctx);
       const site = normalizeTargetUrl(siteUrl).toString();
       const analysis = await loadSearchAnalysis(connectionId, site, { ...(gscProperty ? { property: gscProperty } : {}), ...(days ? { days } : {}) });
-      return text(formatSearchAnalysis(analysis) + nextAfterSearch(await hasAnalytics(connectionId)));
+      const expert = expertAdviceItems(buildDeepAudit({ site, issues: [], search: analysis }));
+      return text(formatSearchAnalysis(analysis) + expertAdviceBlock(expert) + nextAfterSearch(await hasAnalytics(connectionId)));
     }),
   );
 
@@ -50,7 +51,8 @@ export function registerAnalysisTools(server: McpServer): void {
       const connectionId = requireGoogleConnection(explicitId, ctx);
       const site = normalizeTargetUrl(siteUrl).toString();
       const analysis = await loadTrafficAnalysis(connectionId, site, { ...(propertyId ? { propertyId } : {}), ...(days ? { days } : {}) });
-      return text(formatTrafficAnalysis(analysis) + nextAfterTraffic());
+      const expert = expertAdviceItems(buildDeepAudit({ site, issues: [], traffic: analysis }));
+      return text(formatTrafficAnalysis(analysis) + expertAdviceBlock(expert) + nextAfterTraffic());
     }),
   );
 

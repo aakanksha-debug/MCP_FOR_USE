@@ -26,6 +26,33 @@ describe("audit output", () => {
     expect(formatAuditResult(result, null, false)).not.toContain("Connect Google Search Console");
   });
 
+  it("always ends a single check with the expert advice section and strategist link", () => {
+    expect(formatAuditResult(result, null)).toContain("### 🔴 Major issues requiring expert advice (0)");
+    const withHigh = formatAuditResult(
+      {
+        ...result,
+        issues: [
+          {
+            code: "technical.noindex",
+            category: "technical",
+            tier: "high",
+            impact: "high",
+            title: "Page is set to noindex",
+            why: "It will not appear in Google.",
+            recommendation: "Remove the noindex directive if the page should rank.",
+            expertise: "technical-seo",
+            expertReason: "Indexing changes can remove pages from Google",
+            url: "https://x.test/",
+          },
+        ],
+      } as AuditResult,
+      null,
+    );
+    expect(withHigh).toContain("### 🔴 Major issues requiring expert advice (1)");
+    expect(withHigh).toContain("- **Page is set to noindex**: Indexing changes can remove pages from Google");
+    expect(withHigh).toContain("https://www.incrementors.com/30-minutes-strategy-session/");
+  });
+
   it("keeps the score line and first heading on separate lines", () => {
     expect(formatAuditResult(result, null)).toMatch(/· 🟢 0\n\nNo issues found/);
   });

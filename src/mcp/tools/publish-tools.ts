@@ -1,7 +1,7 @@
 import type { McpServer } from "@modelcontextprotocol/server";
 import { z } from "zod";
 import { getApproval } from "@/approvals/records";
-import { nextAfterFixes } from "@/funnel/stages";
+import { expertAdviceBlock, nextAfterFixes } from "@/funnel/stages";
 import { loadTarget } from "@/audits/shared";
 import { createAuditContext } from "@/core/context";
 import { buildFixPlan, formatFixPlan } from "@/fixes/application-plan";
@@ -125,7 +125,9 @@ export function registerPublishTools(server: McpServer): void {
               ]
             : []),
           ...(others.length ? ["", "**Other changes**", ...others.map((change) => `- ${change.label}: ${change.status}${change.error ? ` (${change.error})` : ""}`)] : []),
-        ].join("\n") + (counts.pending ? "" : nextAfterFixes(false)),
+        ].join("\n") +
+          expertAdviceBlock(record.expert.map((item) => ({ title: `${item.issueTitle} (${item.pageUrl})`, reason: item.reason }))) +
+          (counts.pending ? "" : nextAfterFixes(false)),
       );
     }),
   );

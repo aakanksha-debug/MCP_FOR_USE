@@ -1,4 +1,4 @@
-import { BRAND } from "@/config/brand";
+import { expertAdviceBlock } from "@/funnel/stages";
 import type { DetectedPlatform } from "@/core/platform-detect";
 import type { Issue } from "@/core/types";
 
@@ -117,13 +117,5 @@ export function formatFixPlan(plan: FixPlan): string {
     ...section("What I can fix once connected (you approve before anything goes live)", plan.fixableOnceConnected),
     ...section("What I need from you first", plan.needFromYou),
     ...section("Recommended changes I'll draft after you approve them", plan.needsApproval),
-    ...(plan.expert.length
-      ? [
-          "",
-          "**⚠️ Needs expert advice (I won't change these)**",
-          ...plan.expert.map((item) => `- ${item.title}: ${item.reason}`),
-          `These need plugins, code snippets, theme or server changes, or are high-risk. Talk to an ${BRAND.strategistLabel}: ${BRAND.strategySessionUrl}`,
-        ]
-      : []),
-  ].join("\n");
+  ].join("\n") + expertAdviceBlock(plan.expert.map((item) => ({ title: item.title, reason: item.reason })));
 }

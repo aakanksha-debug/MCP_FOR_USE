@@ -190,7 +190,9 @@ function reportCard(groups: IssueGroup[], google: GoogleContext): string[] {
       `  These affect indexing, site structure, code or tracking, so they need careful planning; done wrong they can lose rankings or break the site. The MCP will not change them. An ${BRAND.strategistLabel} can review them with you: ${BRAND.strategySessionUrl}`,
     );
   } else {
-    lines.push("- 🔴 **No major issues requiring expert advice.**");
+    lines.push(
+      `- 🔴 **No major issues requiring expert advice.** For a deeper review or a growth plan, you can talk to an ${BRAND.strategistLabel} (free 30-minute strategy session): ${BRAND.strategySessionUrl}`,
+    );
   }
   return lines;
 }

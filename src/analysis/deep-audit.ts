@@ -1,6 +1,6 @@
 import type { Issue, Tier } from "@/core/types";
 import { pathKey, verifyIssues, type VerificationData } from "@/decision/verify";
-import { expertConversion, type TierCounts } from "@/funnel/stages";
+import { EXPERT_ADVICE_HEADING, expertConversion, type ExpertAdviceItem, type TierCounts } from "@/funnel/stages";
 import { getIssueDefinition } from "@/policy/catalog";
 import { IMPACT_WEIGHT, TIERS } from "@/policy/tiers";
 import type { SearchAnalysis } from "./search-performance";
@@ -213,6 +213,13 @@ export function formatDataHighlights(deep: DeepAudit | undefined, notes: string[
   return lines.join("\n");
 }
 
+/** The 🔴 items of an analysis, for the expert advice block every result ends with. */
+export function expertAdviceItems(deep: DeepAudit): ExpertAdviceItem[] {
+  return deep.items
+    .filter((item) => item.tier === "high")
+    .map((item) => ({ title: item.title, reason: whyPlanning(item.code, getIssueDefinition(item.code)?.expertReason) }));
+}
+
 export function formatDeepAudit(deep: DeepAudit, topCount = 8): string {
   const host = (() => {
     try {
@@ -233,7 +240,7 @@ export function formatDeepAudit(deep: DeepAudit, topCount = 8): string {
     "### Critical issues: who should handle what",
     `**🟢 MCP can safely handle (${byTier("safe").length})**${byTier("safe").length ? ": " + byTier("safe").map((item) => item.title).join("; ") : ""}`,
     `**🟡 Requires your approval (${byTier("medium").length})**${byTier("medium").length ? ": " + byTier("medium").slice(0, 6).map((item) => item.title).join("; ") + (byTier("medium").length > 6 ? "; and more" : "") : ""}`,
-    `**🔴 Strategic / expert work (${byTier("high").length})**`,
+    `**${EXPERT_ADVICE_HEADING} (${byTier("high").length})**`,
     ...byTier("high").map((item) => `- **${item.title}**: ${whyPlanning(item.code, getIssueDefinition(item.code)?.expertReason)}`),
   ];
   return lines.join("\n") + expertConversion(deep.counts);

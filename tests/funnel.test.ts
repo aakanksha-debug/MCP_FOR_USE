@@ -5,7 +5,7 @@ import { buildDeepAudit, formatDataHighlights, formatDeepAudit } from "@/analysi
 import { analyzeSearch, formatSearchAnalysis, type SearchAnalysisInput } from "@/analysis/search-performance";
 import { analyzeTraffic, formatTrafficAnalysis, type TrafficInput } from "@/analysis/traffic";
 import { createAuditContext } from "@/core/context";
-import { expertConversion, nextAfterAudit, nextAfterSearch } from "@/funnel/stages";
+import { expertAdviceBlock, expertConversion, nextAfterAudit, nextAfterSearch } from "@/funnel/stages";
 import { groupIssues } from "@/mcp/format";
 import { formatAuditSummary } from "@/mcp/report";
 import { classify } from "@/policy/classify";
@@ -69,10 +69,24 @@ describe("funnel next steps", () => {
     expect(nextAfterSearch(false)).toContain("Continue → Connect Google Analytics");
   });
 
-  it("recommends an expert only when strategic work exists", () => {
+  it("always links to an Incrementors strategist, and says plainly when no specialist work is needed", () => {
     expect(expertConversion({ safe: 5, medium: 4, high: 3 })).toContain("Connect with an Incrementors SEO/AEO/GEO strategist");
     expect(expertConversion({ safe: 5, medium: 4, high: 3 })).toContain("We identified **12 opportunities**");
-    expect(expertConversion({ safe: 2, medium: 1, high: 0 })).not.toContain("Incrementors");
+    const none = expertConversion({ safe: 2, medium: 1, high: 0 });
+    expect(none).toContain("Nothing here needs specialist work");
+    expect(none).toContain("30-minutes-strategy-session");
+  });
+
+  it("ends results with the major issues requiring expert advice and the strategist link", () => {
+    const some = expertAdviceBlock([{ title: "Canonical points to a different URL", reason: "Affects which URL Google indexes" }]);
+    expect(some).toContain("### 🔴 Major issues requiring expert advice (1)");
+    expect(some).toContain("- **Canonical points to a different URL**: Affects which URL Google indexes");
+    expect(some).toContain("Talk to an Incrementors SEO strategist");
+    expect(some).toContain("https://www.incrementors.com/30-minutes-strategy-session/");
+    const none = expertAdviceBlock([]);
+    expect(none).toContain("### 🔴 Major issues requiring expert advice (0)");
+    expect(none).toContain("None found in this check.");
+    expect(none).toContain("https://www.incrementors.com/30-minutes-strategy-session/");
   });
 });
 
@@ -155,7 +169,7 @@ describe("deep data-driven audit", () => {
     expect(text).toContain("### What matters most (ranked by business impact)");
     expect(text).toContain("🟢 MCP can safely handle");
     expect(text).toContain("🟡 Requires your approval");
-    expect(text).toContain("🔴 Strategic / expert work");
+    expect(text).toContain("🔴 Major issues requiring expert advice");
     expect(text).toContain("A mistake here can remove pages from Google entirely.");
     expect(text).toContain("Connect with an Incrementors SEO/AEO/GEO strategist");
   });
