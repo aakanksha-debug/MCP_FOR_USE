@@ -1153,12 +1153,13 @@ const DEFINITIONS: IssueDefinition[] = [
   {
     code: "data.tracking.no_key_events",
     category: "conversion",
-    tier: "medium",
+    tier: "high",
     impact: "medium",
     title: "Conversions are not tracked in Google Analytics",
     why: "Without key events you can't tell which pages and channels bring enquiries or sales.",
     recommendation: "Mark form submissions, calls, bookings or purchases as key events in GA4.",
     expertise: "conversion",
+    expertReason: "Tracking changes (GA4 key events, tag manager, CRM connections) need planning and testing so the data stays correct",
   },
   {
     code: "data.search.declining",

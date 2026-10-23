@@ -6,25 +6,49 @@ import { analyzeSearch, formatSearchAnalysis, type SearchAnalysisInput } from "@
 import { analyzeTraffic, formatTrafficAnalysis, type TrafficInput } from "@/analysis/traffic";
 import { createAuditContext } from "@/core/context";
 import { expertConversion, nextAfterAudit, nextAfterSearch } from "@/funnel/stages";
-import { formatAuditSummary, groupIssues } from "@/mcp/format";
+import { groupIssues } from "@/mcp/format";
+import { formatAuditSummary } from "@/mcp/report";
 import { classify } from "@/policy/classify";
 import { ORIGIN, ROUTES, siteFetcher } from "./fixtures/site";
 
 const SITE = "https://shop.test/";
 
 describe("Stage 1 summary", () => {
-  it("shows overall and category scores, an opportunity count and only the top findings", async () => {
+  it("leads with SEO, AEO and GEO scores, then issues in three levels and the report card", async () => {
     const full = await runFullAudit(createAuditContext({ fetcher: siteFetcher() }), { url: `${ORIGIN}/` });
     const text = formatAuditSummary(full, false);
-    expect(text).toMatch(/\*\*Overall Website Score: \d+\/100\*\*/);
-    expect(text).toMatch(/^- SEO: \d+$/m);
-    expect(text).toMatch(/^- AEO: \d+$/m);
-    expect(text).toMatch(/We found \*\*\d+ opportunities\*\*, including \*\*\d+ low-risk issues?\*\*/);
-    expect(text).toContain("### Top 5 findings");
-    expect(text.match(/^\d\. (🟢|🟡|🔴) \*\*/gm)).toHaveLength(5);
+    expect(text).toContain("### SEO, AEO and GEO scores");
+    expect(text).toMatch(/\| SEO \| AEO \| GEO \|/);
+    expect(text).toMatch(/\*\*Overall website score: \d+\/100\*\*/);
+    expect(text).toContain("### 📊 Google Search Console and Analytics");
+    expect(text).toContain("Not connected.");
+
+    const order = ["SEO, AEO and GEO scores", "Google Search Console and Analytics", "🟢 Minor issues", "🟡 Intermediate issues", "🔴 Advanced issues", "📋 Your report", "Next step"];
+    const positions = order.map((heading) => text.indexOf(heading));
+    expect(positions.every((position) => position >= 0)).toBe(true);
+    expect([...positions].sort((a, b) => a - b)).toEqual(positions);
+
+    expect(text).toMatch(/✅ \*\*\d+ things? we can fix for you\*\*/);
+    expect(text).toMatch(/🟡 \*\*\d+ things? we recommend:\*\*/);
+    expect(text).toContain("🚀 **1 growth opportunity:");
+    expect(text).toMatch(/🔴 \*\*\d+ major issues? requiring expert advice:\*\*/);
+    expect(text).not.toMatch(/things? we fixed/);
     expect(text).toContain("Next step: safe fixes");
-    expect(text).toMatch(/I found \*\*\d+ issues? that can be safely fixed\*\*/);
     expect(groupIssues(full.issues).length).toBeLessThan(full.issues.length + 1);
+  });
+
+  it("shows Search Console and Analytics numbers and picks the growth opportunity from the data", async () => {
+    const full = await runFullAudit(createAuditContext({ fetcher: siteFetcher() }), { url: `${ORIGIN}/` });
+    const search = analyzeSearch(searchInput);
+    const traffic = analyzeTraffic(trafficInput);
+    const deep = buildDeepAudit({ site: SITE, issues: full.issues, search, traffic });
+    const text = formatAuditSummary(full, { state: true, deep, search, traffic });
+    expect(text).toContain("**Search Console** (Last 28 days): 400 clicks (▼ 33.3%)");
+    expect(text).toContain("**Google Analytics** (Last 28 days): 5,000 sessions");
+    expect(text).toContain("**What the data shows**");
+    expect(text).not.toContain("Not connected.");
+    expect(text).toMatch(/🚀 \*\*1 growth opportunity: (Queries almost on page one|Page is seen in Google but rarely clicked|[^*]+)\.\*\*/);
+    expect(text).toContain("Continue → Deep Data-Driven Audit");
   });
 
   it("leaves Google Business Profile out for sites without local signals", async () => {

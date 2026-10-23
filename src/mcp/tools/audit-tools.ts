@@ -20,7 +20,8 @@ import { pathKey } from "@/decision/verify";
 import { loadSearchRows } from "@/integrations/google/site-data";
 import { buildDeepAudit, formatDataHighlights } from "@/analysis/deep-audit";
 import { loadSearchAnalysis, loadTrafficAnalysis } from "@/analysis/load";
-import { formatAuditResult, formatAuditSummary, formatFullAudit } from "../format";
+import { formatAuditResult, formatFullAudit } from "../format";
+import { formatAuditSummary } from "../report";
 import { guard, text } from "../respond";
 import { optionalGoogleConnection, sessionGoogleConnection } from "../session";
 import { auditIdField, gbpProfileField, gscPropertyField, optionalConnectionIdField, urlField } from "../schemas";
@@ -211,7 +212,7 @@ export function registerAuditTools(server: McpServer): void {
     {
       title: "Full Website Audit",
       description:
-        "STAGE 1 of the funnel: the free website audit. Runs the checks (SEO, AEO, GEO, technical, schema, conversion, content, and Google Business Profile when the business is local) and returns the overall score, category scores and only the top findings, plus the next step. When the user signed in with Google while adding the connector, it also reads their Search Console and Google Analytics data for the site and adds data-backed findings automatically. Use detail='full' only when the user asks to see every finding.",
+        "STAGE 1 of the funnel: the free website audit. Runs the checks (SEO, AEO, GEO, technical, schema, conversion, content, and Google Business Profile when the business is local) and returns the SEO, AEO and GEO scores, Google Search Console and Analytics numbers (when connected), the website issues in three levels (Minor: the MCP can fix; Intermediate: recommend and the client approves; Advanced: expert review), a report card (things we can fix, things we recommend, one growth opportunity, major issues requiring expert advice) and the next step. When the user signed in with Google while adding the connector, it also reads their Search Console and Google Analytics data for the site and adds data-backed findings automatically. Use detail='full' only when the user asks to see every finding.",
       inputSchema: z.object({
         url: urlField,
         checks: z.array(auditIdField).max(8).optional().describe("Subset of checks to run; omit to run all"),
@@ -254,9 +255,16 @@ export function registerAuditTools(server: McpServer): void {
         }),
       ]);
       const deep = search || traffic ? buildDeepAudit({ site: target, issues: full.issues, ...(search ? { search } : {}), ...(traffic ? { traffic } : {}) }) : undefined;
-      const dataSection = formatDataHighlights(deep, notes);
-      if (detail === "full") return text(formatFullAudit(full, expertRecommendation(full.issues), false) + dataSection);
-      return text(formatAuditSummary(full, deep ? true : "no_data", 5, dataSection));
+      if (detail === "full") return text(formatFullAudit(full, expertRecommendation(full.issues), false) + formatDataHighlights(deep, notes));
+      return text(
+        formatAuditSummary(full, {
+          state: deep ? true : "no_data",
+          ...(deep ? { deep } : {}),
+          ...(search ? { search } : {}),
+          ...(traffic ? { traffic } : {}),
+          notes,
+        }),
+      );
     }),
   );
 }

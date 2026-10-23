@@ -1,6 +1,6 @@
 import type { FullAuditResult } from "@/audits";
 import type { AuditId, AuditResult, Impact, Issue, Tier } from "@/core/types";
-import { expertConversion, nextAfterAudit, type GoogleState } from "@/funnel/stages";
+import { expertConversion } from "@/funnel/stages";
 import type { ExpertRecommendation } from "@/decision/recommend";
 import type { VerifiedIssue } from "@/decision/verify";
 import type { StageSummary } from "@/approvals/stage";
@@ -259,62 +259,6 @@ export function countGroups(groups: IssueGroup[]): Record<Tier, number> {
   const counts = { safe: 0, medium: 0, high: 0 };
   for (const group of groups) counts[group.tier] += 1;
   return counts;
-}
-
-function actionFor(group: IssueGroup): string {
-  if (group.tier === "safe") return `🟢 Can be fixed safely with your permission: ${group.recommendation}`;
-  if (group.tier === "medium") return `🟡 Needs your review: ${group.recommendation}`;
-  return `🔴 Needs expert advice. ${group.expertReason ?? "High-risk change"}. What an expert would do: ${group.recommendation}`;
-}
-
-function findingBlock(group: IssueGroup, index: number): string {
-  const where = group.urls.length === 1 ? group.urls[0] : `${group.urls.length} pages, e.g. ${group.urls[0]}`;
-  return [
-    `${index}. ${TIERS[group.tier].emoji} **${group.title}** · ${CATEGORY_LABEL[group.category]} · ${where}`,
-    ...(group.details[0] ? [`   Evidence: ${group.details[0]}`] : []),
-    `   Why it matters: ${group.why}`,
-    `   ${actionFor(group)}`,
-  ].join("\n");
-}
-
-/** Stage 1: score, category scores, opportunity count, top findings, one next step. */
-/** Stage 1 result. `dataSection` (Google data highlights) goes right before the next step. */
-export function formatAuditSummary(full: FullAuditResult, googleConnected: GoogleState, topCount = 5, dataSection = ""): string {
-  const host = (() => {
-    try {
-      return new URL(full.target).hostname;
-    } catch {
-      return full.target;
-    }
-  })();
-  const groups = rankGroups(groupIssues(full.issues));
-  const counts = countGroups(groups);
-  const scores = CATEGORY_ORDER.map((id) => full.results.find((result) => result.audit === id))
-    .filter((result): result is AuditResult => Boolean(result))
-    .map((result) => `- ${CATEGORY_LABEL[result.audit]}: ${result.score}`);
-  const top = groups.slice(0, topCount);
-  const allRefs = full.issues.map((issue) => `- ${TIERS[issue.tier].emoji} \`${issue.code}\` ${issue.url}${issue.detail ? ` (${issue.detail})` : ""}`);
-  const askUser = [...new Set(full.results.flatMap((result) => result.askUser))].slice(0, 3);
-
-  return [
-    `## Website audit: ${host}`,
-    `**Overall Website Score: ${full.overallScore}/100**`,
-    ...scores,
-    "",
-    groups.length
-      ? `We found **${groups.length} opportunit${groups.length === 1 ? "y" : "ies"}**, including **${counts.safe} low-risk issue${counts.safe === 1 ? "" : "s"}** that can be fixed with your permission.`
-      : "We found no significant issues.",
-    ...(top.length ? ["", `### Top ${top.length} findings`, ...top.map((group, index) => findingBlock(group, index + 1))] : []),
-    ...(groups.length
-      ? ["", `**At a glance:** 🟢 ${counts.safe} safe to fix · 🟡 ${counts.medium} need your review · 🔴 ${counts.high} need expert work`]
-      : []),
-    ...(full.skipped.length ? ["", ...full.skipped.map((item) => `_${item.reason}_`)] : []),
-    ...(full.errors.length ? ["", `_Some checks could not run: ${full.errors.map((error) => `${CATEGORY_LABEL[error.audit]} (${error.message})`).join("; ")}_`] : []),
-    ...(askUser.length ? ["", "**To make the next steps more accurate, it helps to know:**", ...askUser.map((item) => `- ${item}`)] : []),
-    ...(allRefs.length
-      ? ["", `<details><summary>All ${full.issues.length} findings (codes for follow-up tools; show only if the user asks)</summary>`, "", ...allRefs, "</details>"]
-      : []),
-  ].join("\n") + dataSection + nextAfterAudit(counts, googleConnected);
 }
 
 export { expertConversion };

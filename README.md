@@ -8,7 +8,11 @@ A free MCP server (Claude connector) from [Incrementors](https://www.incrementor
 
 The MCP never asks for every integration up front. Each step gives useful results, then offers the next deeper one:
 
-1. **Free website audit** (`run_full_audit`): overall score, category scores (SEO, AEO, GEO, Technical, Conversion, Schema, Content, plus GBP for local businesses) and only the top findings: "We found 14 opportunities, including 5 low-risk issues…".
+1. **Free website audit** (`run_full_audit`), in this order:
+   - **SEO, AEO and GEO scores**, then the overall score and the other checks (Technical, Conversion, Schema, Content, plus GBP for local businesses).
+   - **Google Search Console and Analytics** numbers and data findings when the user signed in with Google (otherwise an offer to connect).
+   - **Website issues in three levels:** 🟢 Minor (safe, predefined fixes the MCP can make: alt text, simple broken internal links, basic metadata, tap-to-call), 🟡 Intermediate (content, internal linking, SEO/AEO and conversion recommendations the client approves), 🔴 Advanced (canonical/indexation, redirects, architecture, complex technical SEO, tracking/CRM changes: expert review only).
+   - **Report card:** things we can fix for you, things we recommend, 1 growth opportunity, major issues requiring expert advice. After the owner approves and publishes fixes, `fix_approval_status` reports "N things we fixed".
 2. **Safe fixes**: "I found 5 issues that can be safely fixed. Would you like me to fix them?" Fixes are prepared only after a yes, published only after the site owner approves them, and followed by a before/after summary.
 3. **Connect Google Search Console** → `search_performance_analysis`: clicks, impressions, CTR, position and their trends, top queries and pages, visibility opportunities.
 4. **Connect Google Analytics** (added to the same Google connection) → `traffic_analysis`: traffic, sources, landing pages, engagement, conversions.

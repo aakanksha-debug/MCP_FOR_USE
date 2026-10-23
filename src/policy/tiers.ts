@@ -24,7 +24,7 @@ export const TIERS: Record<Tier, TierDefinition> = {
   medium: {
     tier: "medium",
     emoji: "🟡",
-    label: "Medium",
+    label: "Intermediate",
     policy: "needs-approval",
     description:
       "Content and conversion recommendations. A draft is prepared only after the user explicitly approves it.",
@@ -32,7 +32,7 @@ export const TIERS: Record<Tier, TierDefinition> = {
   high: {
     tier: "high",
     emoji: "🔴",
-    label: "Needs expert advice",
+    label: "Advanced (needs expert advice)",
     policy: "expert-review",
     description:
       "High-risk changes (indexing, canonicals, redirects) or anything that needs installing or removing plugins, adding code snippets, changing the theme or server settings. Never changed by the MCP; contact an Incrementors SEO strategist.",

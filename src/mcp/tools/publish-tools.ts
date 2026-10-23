@@ -116,7 +116,13 @@ export function registerPublishTools(server: McpServer): void {
           `## Fixes for ${record.host}`,
           `Published ${counts.published ?? 0} · Waiting ${counts.pending ?? 0} · Rejected ${counts.skipped ?? 0} · Failed ${counts.failed ?? 0} · Undone ${counts.reverted ?? 0}`,
           ...(published.length
-            ? ["", "**Before → after (live now)**", ...published.map((change) => `- ${change.label}: "${change.before}" → "${change.after}"`)]
+            ? [
+                "",
+                `**✅ ${published.length} thing${published.length === 1 ? "" : "s"} we fixed (live now, before → after)**`,
+                ...published.map((change) => `- ${change.label}: "${change.before}" → "${change.after}"`),
+                "",
+                "_For the final report, add the audit's other report-card lines: the things we recommend, the growth opportunity and the major issues requiring expert advice._",
+              ]
             : []),
           ...(others.length ? ["", "**Other changes**", ...others.map((change) => `- ${change.label}: ${change.status}${change.error ? ` (${change.error})` : ""}`)] : []),
         ].join("\n") + (counts.pending ? "" : nextAfterFixes(false)),
