@@ -9,10 +9,15 @@ export function sameHostUrl(request: Request, path: string): URL {
   return new URL(path, `${proto}://${requestHost(request)}`);
 }
 
-/** Rejects cross-site form posts (CSRF): the Origin header, when sent, must match this site. */
+/**
+ * Rejects cross-site form posts (CSRF): the Origin header, when sent, must
+ * match this site. Browsers send "Origin: null" under strict referrer
+ * policies; then the browser-set Sec-Fetch-Site header decides.
+ */
 export function isSameOrigin(request: Request): boolean {
   const origin = request.headers.get("origin");
   if (!origin) return true;
+  if (origin === "null") return request.headers.get("sec-fetch-site") === "same-origin";
   try {
     return new URL(origin).host === requestHost(request);
   } catch {

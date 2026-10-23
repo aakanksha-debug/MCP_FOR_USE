@@ -192,6 +192,28 @@ describe("connector sign-in", () => {
     expect(location.searchParams.get("google")).toBe("cancelled");
   });
 
+  it("accepts the choice posted from the sign-in page in a browser and rejects other sites", async () => {
+    const auth = await import("@/auth/server");
+    const clientId = String(auth.registerClient({ redirect_uris: [CLAUDE_CALLBACK], token_endpoint_auth_method: "none" }).client_id);
+    const { POST } = await import("../app/oauth/authorize/route");
+    const choose = async (headers: Record<string, string>) => {
+      const start = await auth.startAuthorization(await authorizeParams(clientId, randomToken(48)));
+      if (start.kind !== "ok") throw new Error("expected ok");
+      const body = new URLSearchParams({ request: start.requestId, action: "skip" });
+      return POST(
+        new Request("https://audit.example.test/oauth/authorize", {
+          method: "POST",
+          headers: { "content-type": "application/x-www-form-urlencoded", host: "audit.example.test", ...headers },
+          body,
+        }),
+      );
+    };
+    expect((await choose({ origin: "https://audit.example.test", "sec-fetch-site": "same-origin" })).status).toBe(303);
+    expect((await choose({ origin: "null", "sec-fetch-site": "same-origin" })).status).toBe(303);
+    expect((await choose({ origin: "null" })).status).toBe(403);
+    expect((await choose({ origin: "https://evil.example", "sec-fetch-site": "cross-site" })).status).toBe(403);
+  });
+
   it("shows the sign-in page with both choices", async () => {
     const auth = await import("@/auth/server");
     const clientId = String(auth.registerClient({ redirect_uris: [CLAUDE_CALLBACK], token_endpoint_auth_method: "none", client_name: "Claude" }).client_id);
@@ -199,6 +221,7 @@ describe("connector sign-in", () => {
     const response = await GET(new Request(`https://audit.example.test/oauth/authorize?${await authorizeParams(clientId, randomToken(48))}`));
     expect(response.status).toBe(200);
     expect(response.headers.get("x-frame-options")).toBe("DENY");
+    expect(response.headers.get("referrer-policy")).not.toBe("no-referrer");
     const html = await response.text();
     expect(html).toContain("Sign in with Google");
     expect(html).toContain("Continue without Google");

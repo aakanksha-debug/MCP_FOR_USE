@@ -10,7 +10,8 @@ const SECURITY_HEADERS = {
   "cache-control": "no-store",
   "x-frame-options": "DENY",
   "content-security-policy": "default-src 'none'; style-src 'unsafe-inline'; frame-ancestors 'none'; base-uri 'none'",
-  "referrer-policy": "no-referrer",
+  // Not "no-referrer": with it, browsers send "Origin: null" on the form post and the same-origin check rejects it.
+  "referrer-policy": "same-origin",
 } as const;
 
 const CLAUDE_HOSTS = new Set(["claude.ai", "claude.com"]);
